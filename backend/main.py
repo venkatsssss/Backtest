@@ -6,6 +6,7 @@ import uvicorn
 from datetime import datetime, timedelta
 import logging
 import random
+from fastapi.staticfiles import StaticFiles
  # Changed import
 
 
@@ -382,7 +383,7 @@ async def get_backtest_result(backtest_id: str):
         raise HTTPException(status_code=400, detail="Backtest not completed yet")
     
     return backtest_info["result"]
-
+app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
