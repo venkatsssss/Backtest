@@ -1,7 +1,9 @@
 // SageForge Backtesting Module - Configuration
 
 const CONFIG = {
-    API_BASE_URL: 'http://127.0.0.1:8000/api'
+    API_BASE_URL: 'https://your-render-app-name.onrender.com/api', // Replace with your actual Render URL
+    // ... rest of config stays the same
+};
 ,
     
     ENDPOINTS: {
