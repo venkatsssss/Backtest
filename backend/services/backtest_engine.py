@@ -1,4 +1,4 @@
-# SageForge Hammer Pattern Detection & Backtesting Engine
+# Real Data Only Backtest Engine - NO FAKE/DEMO DATA
 
 import pandas as pd
 import numpy as np
@@ -9,93 +9,152 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-class BacktestEngine:
+class RealDataBacktestEngine:
     def __init__(self):
-        # FIXED: Much more realistic pattern detection parameters
-        self.min_lower_wick_ratio = 1.5  # Lower wick must be at least 1.5x body (was 2.5x - too strict!)
-        self.max_upper_wick_ratio = 2.0  # Upper wick can be up to 2x body (was 1x - too strict!)
+        # Market validation
+        self.market_open = time(9, 15)
+        self.market_close = time(15, 30)
         
-        # ADDED: Trading session times (IST)
-        self.market_open = time(9, 15)   # 9:15 AM
-        self.market_close = time(15, 30)  # 3:30 PM
+        # Indian market holidays (2024-2025)
+        self.market_holidays = {
+            '2024-01-26', '2024-03-08', '2024-03-25', '2024-03-29', '2024-04-11',
+            '2024-04-17', '2024-05-01', '2024-06-17', '2024-08-15', '2024-08-19',
+            '2024-10-02', '2024-10-31', '2024-11-01', '2024-11-15',
+            '2025-01-26', '2025-03-14', '2025-04-10', '2025-04-14', '2025-04-18',
+            '2025-05-01', '2025-06-06', '2025-08-15', '2025-09-07', '2025-10-02',
+            '2025-10-20', '2025-11-04'
+        }
+
+    def is_trading_day(self, date: datetime) -> bool:
+        """Check if given date is a trading day"""
+        if date.weekday() >= 5:  # Weekend
+            return False
+        return date.strftime('%Y-%m-%d') not in self.market_holidays
+
+    def is_trading_time(self, dt: datetime) -> bool:
+        """Check if datetime is within trading hours"""
+        if not self.is_trading_day(dt):
+            return False
+        return self.market_open <= dt.time() <= self.market_close
 
     async def run_hammer_analysis(self, stocks: List[str], strategy: str,
                                  target_percent: float, stop_loss_percent: float,
                                  start_date: str, end_date: str) -> Dict:
-        logger.info(f"🚀 Starting {strategy} analysis for {len(stocks)} stocks")
         
-        # FIXED: Initialize ALL variables at the start (before any try blocks)
+        logger.info(f"🚀 Starting REAL DATA ONLY {strategy} analysis for {len(stocks)} stocks")
+        
+        # Import Angel One service
+        from .angel_one_service import angel_one_service
+        
+        # STRICT CHECK: Ensure Angel One is authenticated
+        if not angel_one_service.is_authenticated:
+            logger.error("❌ Angel One API not authenticated - cannot proceed with real data analysis")
+            return {
+                'profit_rate': 0.0, 'safe_rate': 0.0, 'stop_loss_rate': 0.0, 'no_returns_rate': 0.0,
+                'total_patterns': 0, 'strategy': str(strategy).replace('_', ' ').title(),
+                'period': f"{start_date} to {end_date}", 'stocks_analyzed': 0,
+                'target_percent': float(target_percent), 'stop_loss_percent': float(stop_loss_percent),
+                'stock_results': [], 'detailed_trades': [],
+                'error': 'Angel One API not authenticated. Please check your credentials.',
+                'timeframe': 'Real Data Required'
+            }
+        
+        # Validate date range has trading days
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        trading_days = []
+        current_date = start_dt
+        while current_date <= end_dt:
+            if self.is_trading_day(current_date):
+                trading_days.append(current_date)
+            current_date += timedelta(days=1)
+        
+        if not trading_days:
+            logger.warning(f"⚠️ No trading days in range {start_date} to {end_date}")
+            return {
+                'profit_rate': 0.0, 'safe_rate': 0.0, 'stop_loss_rate': 0.0, 'no_returns_rate': 0.0,
+                'total_patterns': 0, 'strategy': str(strategy).replace('_', ' ').title(),
+                'period': f"{start_date} to {end_date}", 'stocks_analyzed': 0,
+                'target_percent': float(target_percent), 'stop_loss_percent': float(stop_loss_percent),
+                'stock_results': [], 'detailed_trades': [],
+                'message': f'No trading days in selected period (contains only weekends/holidays)',
+                'timeframe': 'Real Data Only'
+            }
+        
+        logger.info(f"📅 Analyzing {len(trading_days)} trading days")
+        
+        # Initialize counters
         detailed_trades = []
         stock_results = []
         total_profit = 0
         total_safe = 0
         total_stop_loss = 0
         total_no_returns = 0
-        
-        # Import Angel One service
-        from .angel_one_service import angel_one_service
+        stocks_with_data = 0
         
         for i, stock in enumerate(stocks):
             try:
-                logger.info(f"📊 Processing {stock} ({i+1}/{len(stocks)})")
+                logger.info(f"📊 Processing {stock} ({i+1}/{len(stocks)}) - REAL DATA ONLY")
                 
-                # Get historical data
+                # Get REAL historical data from Angel One API
                 historical_data = await angel_one_service.get_historical_data(
                     stock, start_date, end_date
                 )
                 
                 if historical_data.empty:
-                    logger.warning(f"⚠️ No data for {stock}")
+                    logger.warning(f"⚠️ No REAL data available from Angel One API for {stock}")
                     continue
-                    
-                logger.info(f"✅ Got {len(historical_data)} candles for {stock}")
                 
-                # Detect hammer patterns
-                patterns = self.detect_hammer_patterns(historical_data, strategy)
-                logger.info(f"🔨 Found {len(patterns)} {strategy} patterns for {stock}")
+                # Verify data is from trading hours only
+                valid_data = historical_data[historical_data.index.map(self.is_trading_time)]
+                if valid_data.empty:
+                    logger.warning(f"⚠️ No valid trading hours data for {stock}")
+                    continue
+                
+                stocks_with_data += 1
+                logger.info(f"✅ Processing {len(valid_data)} REAL candles for {stock}")
+                
+                # Detect patterns using REAL data
+                patterns = await self._detect_real_patterns(valid_data, strategy, stock)
                 
                 if not patterns:
+                    logger.info(f"   No high-confidence {strategy} patterns found in REAL data for {stock}")
                     continue
                 
-                # Initialize per-stock counters
+                logger.info(f"🔨 Found {len(patterns)} high-confidence REAL {strategy} patterns for {stock}")
+                
+                # Test each pattern outcome
                 profit_count = 0
                 safe_count = 0
                 stop_loss_count = 0
                 no_returns_count = 0
                 
                 for pattern in patterns:
-                    outcome = self.test_pattern_outcome(
-                        pattern, historical_data, target_percent, stop_loss_percent
+                    outcome = await self._test_real_pattern_outcome(
+                        pattern, valid_data, target_percent, stop_loss_percent
                     )
                     
-                    # FIXED: Create detailed trade record with new timestamp fields
+                    # Create detailed trade record
                     trade_detail = {
                         'stock': str(stock),
                         'timestamp': str(pattern['timestamp']),
-                        'pattern_time': pattern['timestamp'].strftime('%d-%b %H:%M') if hasattr(pattern['timestamp'], 'strftime') else str(pattern['timestamp']),
+                        'pattern_time': pattern['timestamp'].strftime('%d-%b-%Y %H:%M') if hasattr(pattern['timestamp'], 'strftime') else str(pattern['timestamp']),
                         'exit_time_formatted': outcome.get('exit_time_formatted', 'N/A'),
                         'pattern_type': str(pattern['pattern_type']).replace('_', ' ').title(),
-                        'entry_price': float(pattern['entry_price']),
-                        'exit_price': float(outcome.get('exit_price', pattern['entry_price'])),
-                        'target_price': float(outcome.get('target_price', 0)),
-                        'stop_loss_price': float(outcome.get('stop_loss_price', 0)),
+                        'entry_price': round(float(pattern['entry_price']), 2),
+                        'exit_price': round(float(outcome.get('exit_price', pattern['entry_price'])), 2),
+                        'target_price': round(float(outcome.get('target_price', 0)), 2),
+                        'stop_loss_price': round(float(outcome.get('stop_loss_price', 0)), 2),
                         'outcome': str(outcome['outcome']),
-                        'points_gained': float(outcome.get('exit_price', pattern['entry_price'])) - float(pattern['entry_price']),
-                        'percentage_gain': ((float(outcome.get('exit_price', pattern['entry_price'])) - float(pattern['entry_price'])) / float(pattern['entry_price'])) * 100,
-                        'minutes_held': min(int(outcome.get('minutes_held', 0)), 45),  # FIXED: Cap at 45 minutes
-                        'candles_held': min(int(outcome.get('candles_held', 1)), 3),  # FIXED: Cap at 3 candles
-                        'confidence': float(pattern.get('confidence', 50)),
-                        'exit_reason': str(outcome.get('exit_reason', 'Unknown'))
+                        'points_gained': round(float(outcome.get('exit_price', pattern['entry_price'])) - float(pattern['entry_price']), 2),
+                        'percentage_gain': round(((float(outcome.get('exit_price', pattern['entry_price'])) - float(pattern['entry_price'])) / float(pattern['entry_price'])) * 100, 2),
+                        'minutes_held': int(outcome.get('minutes_held', 0)),
+                        'candles_held': int(outcome.get('candles_held', 0)),
+                        'confidence': round(float(pattern.get('confidence', 0)), 1),
+                        'exit_reason': str(outcome.get('exit_reason', 'Unknown')),
+                        'data_source': 'Angel One Real API'
                     }
-                    
-                    # Round values
-                    trade_detail['entry_price'] = round(trade_detail['entry_price'], 2)
-                    trade_detail['exit_price'] = round(trade_detail['exit_price'], 2)
-                    trade_detail['target_price'] = round(trade_detail['target_price'], 2)
-                    trade_detail['stop_loss_price'] = round(trade_detail['stop_loss_price'], 2)
-                    trade_detail['points_gained'] = round(trade_detail['points_gained'], 2)
-                    trade_detail['percentage_gain'] = round(trade_detail['percentage_gain'], 2)
-                    trade_detail['confidence'] = round(trade_detail['confidence'], 1)
                     
                     detailed_trades.append(trade_detail)
                     
@@ -120,54 +179,54 @@ class BacktestEngine:
                     'safe_count': int(safe_count),
                     'stop_loss_count': int(stop_loss_count),
                     'no_returns_count': int(no_returns_count),
-                    'profit_rate': round(float(profit_rate), 2)
+                    'profit_rate': round(float(profit_rate), 2),
+                    'avg_confidence': round(float(np.mean([p['confidence'] for p in patterns])), 1) if patterns else 0,
+                    'data_source': 'Angel One Real API'
                 })
                 
-                # FIXED: Update totals (variables now exist)
+                # Update totals
                 total_profit += profit_count
                 total_safe += safe_count
                 total_stop_loss += stop_loss_count
                 total_no_returns += no_returns_count
                 
-                await asyncio.sleep(0.1)
+                # Respect API rate limits
+                await asyncio.sleep(0.2)
                 
             except Exception as e:
                 logger.error(f"❌ Error processing {stock}: {str(e)}")
-                # FIXED: Variables are now defined, so this won't crash
                 continue
         
-        # Calculate overall results (variables are now guaranteed to exist)
+        # Final results
         total_patterns = total_profit + total_safe + total_stop_loss + total_no_returns
         
         if total_patterns == 0:
-            logger.warning(f"⚠️ No patterns found across all {len(stocks)} stocks!")
+            logger.warning(f"⚠️ No high-confidence patterns found in REAL data across {len(stocks)} stocks")
             return {
-                'profit_rate': 0.0,
-                'safe_rate': 0.0,
-                'stop_loss_rate': 0.0,
-                'no_returns_rate': 0.0,
-                'total_patterns': 0,
-                'strategy': str(strategy).replace('_', ' ').title(),
-                'period': f"{start_date} to {end_date}",
-                'stocks_analyzed': 0,
-                'target_percent': float(target_percent),
-                'stop_loss_percent': float(stop_loss_percent),
-                'stock_results': [],
-                'detailed_trades': [],
-                'message': f'No {str(strategy).replace("_", " ")} patterns detected',
-                'timeframe': 'Intraday 15-minute'
+                'profit_rate': 0.0, 'safe_rate': 0.0, 'stop_loss_rate': 0.0, 'no_returns_rate': 0.0,
+                'total_patterns': 0, 'strategy': str(strategy).replace('_', ' ').title(),
+                'period': f"{start_date} to {end_date}", 'stocks_analyzed': stocks_with_data,
+                'target_percent': float(target_percent), 'stop_loss_percent': float(stop_loss_percent),
+                'stock_results': [], 'detailed_trades': [],
+                'message': f'No high-confidence {str(strategy).replace("_", " ")} patterns detected with minimum 85% confidence',
+                'timeframe': 'Real Data Only', 'data_source': 'Angel One API',
+                'trading_days_analyzed': len(trading_days)
             }
         
-        # Calculate rates
+        # Calculate success rates
         profit_rate = round((total_profit / total_patterns) * 100, 2)
         safe_rate = round((total_safe / total_patterns) * 100, 2)
         stop_loss_rate = round((total_stop_loss / total_patterns) * 100, 2)
         no_returns_rate = round((total_no_returns / total_patterns) * 100, 2)
         
-        # Sort detailed trades by timestamp (most recent first)
-        detailed_trades.sort(key=lambda x: x['timestamp'], reverse=True)
+        # Sort results by performance
+        detailed_trades.sort(key=lambda x: (x['timestamp'], -x['confidence']), reverse=True)
+        stock_results.sort(key=lambda x: (x['profit_rate'], x['avg_confidence']), reverse=True)
         
-        logger.info(f"✅ Analysis complete: {total_patterns} patterns, {len(detailed_trades)} detailed trades")
+        logger.info(f"✅ REAL DATA Analysis Complete:")
+        logger.info(f"   Total patterns: {total_patterns}")
+        logger.info(f"   Profit rate: {profit_rate}%")
+        logger.info(f"   Stocks analyzed: {stocks_with_data}")
         
         return {
             'profit_rate': float(profit_rate),
@@ -177,45 +236,52 @@ class BacktestEngine:
             'total_patterns': int(total_patterns),
             'strategy': str(strategy).replace('_', ' ').title(),
             'period': f"{start_date} to {end_date}",
-            'stocks_analyzed': int(len([s for s in stock_results if s['patterns_found'] > 0])),
+            'stocks_analyzed': int(stocks_with_data),
             'target_percent': float(target_percent),
             'stop_loss_percent': float(stop_loss_percent),
-            'stock_results': sorted(stock_results, key=lambda x: x['profit_rate'], reverse=True)[:20],
-            'detailed_trades': detailed_trades,
-            'timeframe': 'Intraday 15-minute'
+            'stock_results': stock_results[:15],  # Top 15 stocks
+            'detailed_trades': detailed_trades[:30],  # Top 30 trades
+            'timeframe': 'Real Intraday 15-minute',
+            'data_source': 'Angel One API',
+            'trading_days_analyzed': len(trading_days),
+            'pattern_detection': 'High Confidence (85%+ only)',
+            'avg_confidence': round(float(np.mean([t['confidence'] for t in detailed_trades])), 1) if detailed_trades else 0,
+            'authentication_status': 'Angel One API Authenticated'
         }
 
-    def detect_hammer_patterns(self, df: pd.DataFrame, pattern_type: str) -> List[Dict]:
-        """Simple and effective hammer pattern detection"""
+    async def _detect_real_patterns(self, df: pd.DataFrame, pattern_type: str, symbol: str) -> List[Dict]:
+        """Detect patterns in REAL data only - very strict criteria"""
+        
         if df.empty:
-            logger.warning("❌ DataFrame is empty")
             return []
-            
-        logger.info(f"🔍 PATTERN DETECTION:")
-        logger.info(f"   Total candles: {len(df)}")
+        
+        logger.info(f"🔍 Analyzing REAL {pattern_type} patterns for {symbol}")
+        logger.info(f"   Data points: {len(df)}")
         logger.info(f"   Date range: {df.index.min()} to {df.index.max()}")
         
         patterns = []
         
-        # Simple pattern detection - check each candle
         for i in range(len(df)):
             try:
                 row = df.iloc[i]
                 timestamp = df.index[i]
+                
+                # Ensure trading hours
+                if not self.is_trading_time(timestamp.to_pydatetime()):
+                    continue
                 
                 open_val = float(row['open'])
                 high_val = float(row['high'])
                 low_val = float(row['low'])
                 close_val = float(row['close'])
                 
-                # Check for patterns
-                is_pattern = False
-                if pattern_type == "hammer":
-                    is_pattern = self._is_simple_hammer(open_val, high_val, low_val, close_val)
-                elif pattern_type == "inverted_hammer":
-                    is_pattern = self._is_simple_inverted_hammer(open_val, high_val, low_val, close_val)
+                # Very strict pattern detection
+                is_pattern, confidence, details = await self._analyze_candle_pattern(
+                    open_val, high_val, low_val, close_val, pattern_type
+                )
                 
-                if is_pattern:
+                # Only accept very high confidence patterns (85%+)
+                if is_pattern and confidence >= 85.0:
                     pattern = {
                         'timestamp': timestamp,
                         'open': open_val,
@@ -223,374 +289,245 @@ class BacktestEngine:
                         'low': low_val,
                         'close': close_val,
                         'pattern_type': pattern_type,
-                        'entry_price': close_val,  # Entry at close of hammer candle
-                        'confidence': 75.0
+                        'entry_price': close_val,
+                        'confidence': confidence,
+                        'details': details,
+                        'symbol': symbol,
+                        'data_source': 'Angel One Real API'
                     }
                     patterns.append(pattern)
                     
+                    logger.info(f"🔨 HIGH-CONFIDENCE {pattern_type.upper()} for {symbol} at {timestamp}:")
+                    logger.info(f"    O={open_val:.2f} H={high_val:.2f} L={low_val:.2f} C={close_val:.2f}")
+                    logger.info(f"    Confidence: {confidence:.1f}% | {details}")
+                    
             except Exception as e:
-                if i < 3:  # Only log first few errors
-                    logger.error(f"❌ Error processing candle {i}: {e}")
+                continue
         
-        logger.info(f"✅ Found {len(patterns)} {pattern_type} patterns")
         return patterns
 
-    def _is_simple_hammer(self, open_price: float, high_price: float, low_price: float, close_price: float) -> bool:
-        """Simple hammer detection"""
+    async def _analyze_candle_pattern(self, open_price: float, high_price: float, 
+                                    low_price: float, close_price: float, pattern_type: str) -> tuple:
+        """Ultra-strict candle pattern analysis"""
+        
         try:
-            if high_price <= low_price:
-                return False
-                
+            # Basic validations
+            if high_price <= low_price or high_price <= max(open_price, close_price):
+                return False, 0.0, "Invalid OHLC"
+            
+            # Calculate measurements
+            body = abs(close_price - open_price)
             lower_shadow = min(open_price, close_price) - low_price
             upper_shadow = high_price - max(open_price, close_price)
             total_range = high_price - low_price
             
             if total_range <= 0:
-                return False
+                return False, 0.0, "No range"
             
-            # Lenient hammer conditions
-            lower_dominance = lower_shadow / total_range
-            upper_ratio = upper_shadow / total_range
+            # Pattern-specific analysis
+            if pattern_type == "hammer":
+                return await self._analyze_hammer_strict(body, lower_shadow, upper_shadow, total_range)
+            elif pattern_type == "inverted_hammer":
+                return await self._analyze_inverted_hammer_strict(body, lower_shadow, upper_shadow, total_range)
             
-            conditions = [
-                lower_dominance >= 0.4,  # Lower shadow at least 40% of range
-                upper_ratio <= 0.3,      # Upper shadow at most 30% of range
-                lower_shadow > upper_shadow,  # Lower shadow longer
-                total_range > 0.01       # Meaningful range
-            ]
+            return False, 0.0, "Unknown pattern"
             
-            return all(conditions)
-        except Exception:
-            return False
+        except Exception as e:
+            return False, 0.0, f"Analysis error: {str(e)}"
 
-    def _is_simple_inverted_hammer(self, open_price: float, high_price: float, low_price: float, close_price: float) -> bool:
-        """Simple inverted hammer detection"""
-        try:
-            if high_price <= low_price:
-                return False
-                
-            lower_shadow = min(open_price, close_price) - low_price
-            upper_shadow = high_price - max(open_price, close_price)
-            total_range = high_price - low_price
-            
-            if total_range <= 0:
-                return False
-            
-            # Lenient inverted hammer conditions
-            upper_dominance = upper_shadow / total_range
-            lower_ratio = lower_shadow / total_range
-            
-            conditions = [
-                upper_dominance >= 0.4,  # Upper shadow at least 40% of range
-                lower_ratio <= 0.3,      # Lower shadow at most 30% of range
-                upper_shadow > lower_shadow,  # Upper shadow longer
-                total_range > 0.01       # Meaningful range
-            ]
-            
-            return all(conditions)
-        except Exception:
-            return False
+    async def _analyze_hammer_strict(self, body: float, lower_shadow: float, 
+                                   upper_shadow: float, total_range: float) -> tuple:
+        """Ultra-strict hammer analysis"""
+        
+        if lower_shadow <= 0:
+            return False, 0.0, "No lower shadow"
+        
+        # Handle very small bodies
+        effective_body = max(body, total_range * 0.08)  # Min 8% of total range
+        
+        # Ultra-strict criteria
+        lower_body_ratio = lower_shadow / effective_body
+        upper_body_ratio = upper_shadow / effective_body
+        lower_dominance = lower_shadow / total_range
+        
+        # Requirements for high-confidence hammer
+        conditions_met = 0
+        confidence_points = 0
+        
+        # 1. Lower shadow must be at least 3x body (very strict)
+        if lower_body_ratio >= 3.0:
+            conditions_met += 1
+            confidence_points += min(35, lower_body_ratio * 10)  # Up to 35 points
+        else:
+            return False, 0.0, f"Weak lower shadow ({lower_body_ratio:.1f}x)"
+        
+        # 2. Upper shadow must be very small (max 25% of body)
+        if upper_body_ratio <= 0.25:
+            conditions_met += 1
+            confidence_points += 25 - (upper_body_ratio * 50)  # More points for smaller upper shadow
+        else:
+            return False, 0.0, f"Large upper shadow ({upper_body_ratio:.1f}x)"
+        
+        # 3. Lower shadow must dominate range (at least 70%)
+        if lower_dominance >= 0.70:
+            conditions_met += 1
+            confidence_points += lower_dominance * 30  # Up to 30 points
+        else:
+            return False, 0.0, f"Insufficient dominance ({lower_dominance:.1%})"
+        
+        # 4. Meaningful range
+        if total_range > 0:
+            confidence_points += 10
+            conditions_met += 1
+        
+        final_confidence = min(100, confidence_points)
+        details = f"Lower={lower_body_ratio:.1f}x, Upper={upper_body_ratio:.1f}x, Dom={lower_dominance:.1%}"
+        
+        return True, final_confidence, details
 
-    def test_pattern_outcome(self, pattern: Dict, df: pd.DataFrame,
-                           target_percent: float, stop_loss_percent: float) -> Dict:
-        """
-        FIXED: Realistic intraday constraints for Indian market (375 min total)
-        Exit within 2-3 candles maximum (30-45 minutes for 15-min candles)
-        """
+    async def _analyze_inverted_hammer_strict(self, body: float, lower_shadow: float,
+                                            upper_shadow: float, total_range: float) -> tuple:
+        """Ultra-strict inverted hammer analysis"""
+        
+        if upper_shadow <= 0:
+            return False, 0.0, "No upper shadow"
+        
+        effective_body = max(body, total_range * 0.08)
+        
+        upper_body_ratio = upper_shadow / effective_body
+        lower_body_ratio = lower_shadow / effective_body
+        upper_dominance = upper_shadow / total_range
+        
+        conditions_met = 0
+        confidence_points = 0
+        
+        # 1. Upper shadow must be at least 3x body
+        if upper_body_ratio >= 3.0:
+            conditions_met += 1
+            confidence_points += min(35, upper_body_ratio * 10)
+        else:
+            return False, 0.0, f"Weak upper shadow ({upper_body_ratio:.1f}x)"
+        
+        # 2. Lower shadow must be very small (max 25% of body)
+        if lower_body_ratio <= 0.25:
+            conditions_met += 1
+            confidence_points += 25 - (lower_body_ratio * 50)
+        else:
+            return False, 0.0, f"Large lower shadow ({lower_body_ratio:.1f}x)"
+        
+        # 3. Upper shadow must dominate range (at least 70%)
+        if upper_dominance >= 0.70:
+            conditions_met += 1
+            confidence_points += upper_dominance * 30
+        else:
+            return False, 0.0, f"Insufficient dominance ({upper_dominance:.1%})"
+        
+        # 4. Meaningful range
+        if total_range > 0:
+            confidence_points += 10
+            conditions_met += 1
+        
+        final_confidence = min(100, confidence_points)
+        details = f"Upper={upper_body_ratio:.1f}x, Lower={lower_body_ratio:.1f}x, Dom={upper_dominance:.1%}"
+        
+        return True, final_confidence, details
+
+    async def _test_real_pattern_outcome(self, pattern: Dict, df: pd.DataFrame,
+                                       target_percent: float, stop_loss_percent: float) -> Dict:
+        """Test pattern outcome using REAL data with intraday constraints"""
+        
         entry_price = pattern['entry_price']
         entry_time = pattern['timestamp']
-        
-        # Calculate target and stop-loss levels
         target_price = entry_price * (1 + target_percent / 100)
         stop_loss_price = entry_price * (1 - stop_loss_percent / 100)
         
         try:
-            # Get future data after pattern entry
+            # Get future data after pattern
             future_data = df[df.index > entry_time].copy()
             
             if future_data.empty:
-                return {
-                    'outcome': 'no_returns',
-                    'exit_price': entry_price,
-                    'exit_time': entry_time,
-                    'minutes_held': 0,
-                    'candles_held': 0,
-                    'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                    'exit_time_formatted': 'N/A',
-                    'exit_reason': 'No future data'
-                }
-
-            # FIXED: Limit to same trading day and maximum 3 candles
-            same_day_candles = []
+                return self._create_outcome('no_returns', entry_price, entry_time, 
+                                          target_price, stop_loss_price, 'No future data')
+            
+            # Same-day trading only, max 3 candles (45 minutes)
             entry_date = entry_time.date() if hasattr(entry_time, 'date') else str(entry_time)[:10]
+            same_day_candles = []
             
             for timestamp, row in future_data.iterrows():
-                # Stop if different trading day
                 candle_date = timestamp.date() if hasattr(timestamp, 'date') else str(timestamp)[:10]
-                if str(candle_date) != str(entry_date):
-                    break
-                    
-                # FIXED: Maximum 3 candles (45 minutes for 15-min timeframe)
-                if len(same_day_candles) >= 3:
+                
+                # Stop if different day or max candles reached
+                if str(candle_date) != str(entry_date) or len(same_day_candles) >= 3:
                     break
                     
                 same_day_candles.append((timestamp, row))
-
+            
             if not same_day_candles:
-                return {
-                    'outcome': 'no_returns',
-                    'exit_price': entry_price,
-                    'exit_time': entry_time,
-                    'minutes_held': 0,
-                    'candles_held': 0,
-                    'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                    'exit_time_formatted': 'N/A',
-                    'exit_reason': 'No same-day data'
-                }
-
-            # Test each candle (maximum 3 candles = 45 minutes)
+                return self._create_outcome('no_returns', entry_price, entry_time,
+                                          target_price, stop_loss_price, 'No same-day data')
+            
+            # Test each candle for target/stop-loss
             for candle_num, (timestamp, row) in enumerate(same_day_candles, 1):
                 try:
-                    # FIXED: Calculate realistic minutes (15-min intervals)
-                    minutes_held = candle_num * 15  # 15, 30, or 45 minutes max
-                    
                     high_price = float(row['high'])
                     low_price = float(row['low'])
                     close_price = float(row['close'])
-
-                    # Check TARGET hit (profit)
+                    minutes_held = candle_num * 15
+                    
+                    # Check target hit first (profit)
                     if high_price >= target_price:
-                        return {
-                            'outcome': 'profit',
-                            'exit_price': target_price,
-                            'exit_time': timestamp,
-                            'minutes_held': minutes_held,
-                            'candles_held': candle_num,
-                            'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                            'exit_time_formatted': timestamp.strftime('%d-%b %H:%M') if hasattr(timestamp, 'strftime') else str(timestamp),
-                            'exit_reason': f'Target hit in candle {candle_num}'
-                        }
-
-                    # Check STOP LOSS hit
+                        return self._create_outcome('profit', target_price, timestamp,
+                                                  target_price, stop_loss_price,
+                                                  f'Target hit in candle {candle_num}',
+                                                  minutes_held, candle_num)
+                    
+                    # Check stop loss
                     if low_price <= stop_loss_price:
-                        return {
-                            'outcome': 'stop_loss',
-                            'exit_price': stop_loss_price,
-                            'exit_time': timestamp,
-                            'minutes_held': minutes_held,
-                            'candles_held': candle_num,
-                            'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                            'exit_time_formatted': timestamp.strftime('%d-%b %H:%M') if hasattr(timestamp, 'strftime') else str(timestamp),
-                            'exit_reason': f'Stop loss hit in candle {candle_num}'
-                        }
-
+                        return self._create_outcome('stop_loss', stop_loss_price, timestamp,
+                                                  target_price, stop_loss_price,
+                                                  f'Stop loss hit in candle {candle_num}',
+                                                  minutes_held, candle_num)
+                    
                 except Exception as e:
                     continue
-
-            # Final outcome after 3 candles (forced exit)
+            
+            # Final exit after all candles
             if same_day_candles:
                 final_timestamp, final_row = same_day_candles[-1]
                 final_price = float(final_row['close'])
-                final_minutes = len(same_day_candles) * 15  # 15, 30, or 45 minutes
+                final_minutes = len(same_day_candles) * 15
                 
                 outcome = 'safe' if final_price > entry_price else 'no_returns'
                 
-                return {
-                    'outcome': outcome,
-                    'exit_price': final_price,
-                    'exit_time': final_timestamp,
-                    'minutes_held': final_minutes,
-                    'candles_held': len(same_day_candles),
-                    'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                    'exit_time_formatted': final_timestamp.strftime('%d-%b %H:%M') if hasattr(final_timestamp, 'strftime') else str(final_timestamp),
-                    'exit_reason': f'Forced exit after {len(same_day_candles)} candles'
-                }
-
+                return self._create_outcome(outcome, final_price, final_timestamp,
+                                          target_price, stop_loss_price,
+                                          f'End-of-session exit after {len(same_day_candles)} candles',
+                                          final_minutes, len(same_day_candles))
+            
+            return self._create_outcome('no_returns', entry_price, entry_time,
+                                      target_price, stop_loss_price, 'No valid candles')
+            
         except Exception as e:
-            logger.error(f"Error in outcome testing: {e}")
-            return {
-                'outcome': 'no_returns',
-                'exit_price': entry_price,
-                'exit_time': entry_time,
-                'minutes_held': 0,
-                'candles_held': 0,
-                'pattern_time': entry_time.strftime('%d-%b %H:%M') if hasattr(entry_time, 'strftime') else str(entry_time),
-                'exit_time_formatted': 'N/A',
-                'exit_reason': 'Calculation error'
-            }
+            logger.error(f"Error testing outcome: {e}")
+            return self._create_outcome('no_returns', entry_price, entry_time,
+                                      target_price, stop_loss_price, 'Calculation error')
 
-    # Keep your existing methods for compatibility
-    def _detect_simple_hammer(self, open_price, high_price, low_price, close_price) -> bool:
-        """ULTRA-SIMPLE hammer detection - very lenient for testing"""
-        try:
-            if high_price <= low_price:
-                return False
-            
-            body = abs(close_price - open_price)
-            lower_shadow = min(open_price, close_price) - low_price
-            upper_shadow = high_price - max(open_price, close_price)
-            total_range = high_price - low_price
-            
-            if total_range <= 0:
-                return False
-            
-            # VERY LENIENT CONDITIONS (for testing)
-            lower_dominance = lower_shadow / total_range
-            upper_ratio = upper_shadow / total_range
-            
-            conditions = [
-                lower_dominance >= 0.25,  # Lower shadow at least 25% of range
-                upper_ratio <= 0.5,       # Upper shadow at most 50% of range
-                lower_shadow >= upper_shadow * 0.5,  # Lower shadow somewhat longer
-                total_range > 0.01
-            ]
-            
-            return all(conditions)
-        except Exception:
-            return False
-
-    def _detect_simple_inverted_hammer(self, open_price, high_price, low_price, close_price) -> bool:
-        """ULTRA-SIMPLE inverted hammer detection"""
-        try:
-            if high_price <= low_price:
-                return False
-            
-            body = abs(close_price - open_price)
-            lower_shadow = min(open_price, close_price) - low_price
-            upper_shadow = high_price - max(open_price, close_price)
-            total_range = high_price - low_price
-            
-            if total_range <= 0:
-                return False
-            
-            # VERY LENIENT CONDITIONS
-            upper_dominance = upper_shadow / total_range
-            lower_ratio = lower_shadow / total_range
-            
-            conditions = [
-                upper_dominance >= 0.25,  # Upper shadow at least 25% of range
-                lower_ratio <= 0.5,       # Lower shadow at most 50% of range
-                upper_shadow >= lower_shadow * 0.5,  # Upper shadow somewhat longer
-                total_range > 0.01
-            ]
-            
-            return all(conditions)
-        except Exception:
-            return False
-
-    def _is_hammer_realistic(self, candle, column_map) -> bool:
-        """FIXED: Much more realistic hammer pattern detection"""
-        try:
-            open_price = float(candle[column_map['open']])
-            high_price = float(candle[column_map['high']])
-            low_price = float(candle[column_map['low']])
-            close_price = float(candle[column_map['close']])
-        except (ValueError, KeyError) as e:
-            return False
-            
-        # Basic validation
-        if high_price <= low_price or high_price < max(open_price, close_price) or low_price > min(open_price, close_price):
-            return False
-            
-        # Calculate components
-        body = abs(close_price - open_price)
-        lower_shadow = min(open_price, close_price) - low_price
-        upper_shadow = high_price - max(open_price, close_price)
-        total_range = high_price - low_price
+    def _create_outcome(self, outcome: str, exit_price: float, exit_time,
+                       target_price: float, stop_loss_price: float, reason: str,
+                       minutes_held: int = 0, candles_held: int = 0) -> Dict:
+        """Create standardized outcome dictionary"""
         
-        # Handle very small bodies
-        if body < 0.1:
-            body = 0.1
-            
-        # FIXED: Much more realistic hammer conditions
-        lower_wick_ratio = lower_shadow / body
-        upper_wick_ratio = upper_shadow / body
-        
-        # Realistic conditions for hammer
-        conditions = [
-            lower_wick_ratio >= self.min_lower_wick_ratio,  # Lower wick ≥ 1.5x body (was 2.5x)
-            upper_wick_ratio <= self.max_upper_wick_ratio,  # Upper wick ≤ 2x body (was 1x)
-            lower_shadow > 0,    # Must have some lower wick
-            total_range > 0      # Valid price range
-        ]
-        
-        return all(conditions)
+        return {
+            'outcome': outcome,
+            'exit_price': exit_price,
+            'exit_time': exit_time,
+            'exit_time_formatted': exit_time.strftime('%d-%b %H:%M') if hasattr(exit_time, 'strftime') else str(exit_time),
+            'target_price': target_price,
+            'stop_loss_price': stop_loss_price,
+            'exit_reason': reason,
+            'minutes_held': minutes_held,
+            'candles_held': candles_held
+        }
 
-    def _is_inverted_hammer_realistic(self, candle, column_map) -> bool:
-        """FIXED: Much more realistic inverted hammer pattern detection"""
-        try:
-            open_price = float(candle[column_map['open']])
-            high_price = float(candle[column_map['high']])
-            low_price = float(candle[column_map['low']])
-            close_price = float(candle[column_map['close']])
-        except (ValueError, KeyError):
-            return False
-            
-        # Basic validation
-        if high_price <= low_price or high_price < max(open_price, close_price) or low_price > min(open_price, close_price):
-            return False
-            
-        # Calculate components
-        body = abs(close_price - open_price)
-        lower_shadow = min(open_price, close_price) - low_price
-        upper_shadow = high_price - max(open_price, close_price)
-        total_range = high_price - low_price
-        
-        # Handle very small bodies
-        if body < 0.1:
-            body = 0.1
-            
-        # FIXED: Much more realistic inverted hammer conditions
-        upper_wick_ratio = upper_shadow / body
-        lower_wick_ratio = lower_shadow / body
-        
-        # Realistic conditions for inverted hammer
-        conditions = [
-            upper_wick_ratio >= self.min_lower_wick_ratio,  # Upper wick ≥ 1.5x body (was 2.5x)
-            lower_wick_ratio <= self.max_upper_wick_ratio,  # Lower wick ≤ 2x body (was 1x)
-            upper_shadow > 0,    # Must have some upper wick
-            total_range > 0      # Valid price range
-        ]
-        
-        return all(conditions)
-
-    def _calculate_pattern_confidence_realistic(self, candle, column_map, pattern_type: str) -> float:
-        """FIXED: More realistic confidence calculation"""
-        try:
-            open_price = float(candle[column_map['open']])
-            high_price = float(candle[column_map['high']])
-            low_price = float(candle[column_map['low']])
-            close_price = float(candle[column_map['close']])
-        except (ValueError, KeyError):
-            return 50.0
-            
-        body = abs(close_price - open_price)
-        total_range = high_price - low_price
-        
-        if total_range == 0:
-            return 50.0
-            
-        if pattern_type == 'hammer':
-            lower_shadow = min(open_price, close_price) - low_price
-            lower_dominance = (lower_shadow / total_range) * 100
-            return max(50, min(100, lower_dominance * 1.2))
-        else:  # inverted_hammer
-            upper_shadow = high_price - max(open_price, close_price)
-            upper_dominance = (upper_shadow / total_range) * 100
-            return max(50, min(100, upper_dominance * 1.2))
-
-    # Keep your existing methods for compatibility
-    def _is_hammer(self, candle) -> bool:
-        """Legacy method - redirects to realistic version"""
-        column_map = {'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close'}
-        return self._is_hammer_realistic(candle, column_map)
-
-    def _is_inverted_hammer(self, candle) -> bool:
-        """Legacy method - redirects to realistic version"""
-        column_map = {'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close'}
-        return self._is_inverted_hammer_realistic(candle, column_map)
-
-    def _calculate_pattern_confidence(self, candle, pattern_type: str) -> float:
-        """Legacy method - redirects to realistic version"""
-        column_map = {'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close'}
-        return self._calculate_pattern_confidence_realistic(candle, column_map, pattern_type)
+# Legacy class name for backward compatibility
+BacktestEngine = RealDataBacktestEngine
