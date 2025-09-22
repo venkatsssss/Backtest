@@ -6,11 +6,11 @@ import uvicorn
 from datetime import datetime, timedelta
 import logging
 import random
+ # Changed import
 
 
-# Import real Angel One service
 from .services.angel_one_service import angel_one_service
-from .services.backtest_engine import BacktestEngine
+from .services.backtest_engine import RealDataBacktestEngine 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,15 +28,19 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Angel One connection on startup"""
+    """Initialize Angel One connection on startup - STRICT AUTHENTICATION REQUIRED"""
     try:
+        logger.info("🔄 Attempting Angel One API authentication...")
         success = await angel_one_service.authenticate()
         if success:
-            logger.info("✅ Angel One API connected successfully")
+            logger.info("✅ Angel One API connected successfully - REAL DATA AVAILABLE")
         else:
-            logger.warning("⚠️ Angel One API authentication failed - using demo mode")
+            logger.error("❌ Angel One API authentication FAILED - NO REAL DATA AVAILABLE")
+            logger.error("❌ Please check your Angel One credentials in .env file")
+            logger.error("❌ Required: ANGEL_ONE_API_KEY, ANGEL_ONE_CLIENT_ID, ANGEL_ONE_PASSWORD, ANGEL_ONE_TOTP_SECRET")
     except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
+        logger.error(f"❌ Startup error: {str(e)}")
+        logger.error("❌ Angel One API authentication failed - REAL DATA NOT AVAILABLE")
 
 @app.get("/")
 async def root():
@@ -45,23 +49,40 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     return {
-        "status": "healthy",
+        "status": "healthy" if angel_one_service.is_authenticated else "no_real_data",
         "timestamp": datetime.now(),
-        "angel_one_connected": angel_one_service.is_authenticated
+        "angel_one_connected": angel_one_service.is_authenticated,
+        "data_source": "Angel One Real API" if angel_one_service.is_authenticated else "NO REAL DATA",
+        "warning": "Angel One API authentication required for real data" if not angel_one_service.is_authenticated else None
     }
 
 @app.get("/api/stocks")
 async def get_stocks(sector: str = "all"):
-    """Get real NSE stocks from Angel One API"""
+    """Get REAL NSE stocks from Angel One API ONLY"""
     try:
+        # STRICT CHECK: Must be authenticated
+        if not angel_one_service.is_authenticated:
+            raise HTTPException(
+                status_code=503, 
+                detail="Angel One API not authenticated. Cannot provide real stock data. Please check your credentials."
+            )
+        
         stocks = await angel_one_service.get_nse_stocks(sector)
-        logger.info(f"Retrieved {len(stocks)} stocks for sector: {sector}")
+        
+        if not stocks:
+            raise HTTPException(
+                status_code=404,
+                detail="No real stock data available from Angel One API"
+            )
+        
+        logger.info(f"✅ Retrieved {len(stocks)} REAL stocks from Angel One API for sector: {sector}")
         return stocks
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting stocks: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get stocks: {str(e)}")
-
+        logger.error(f"❌ Error getting real stocks: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get real stocks from Angel One API: {str(e)}")
 # ... (keep all other endpoints the same)
 
 class BacktestRequest(BaseModel):
@@ -85,20 +106,28 @@ active_backtests = {}
 
 @app.post("/api/backtest/run")
 async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
-    """Run backtest with REAL market data"""
+    """Run backtest with REAL Angel One data ONLY"""
     try:
-        backtest_id = f"bt_{int(datetime.now().timestamp())}"
+        # STRICT CHECK: Must be authenticated
+        if not angel_one_service.is_authenticated:
+            raise HTTPException(
+                status_code=503,
+                detail="Angel One API not authenticated. Cannot run backtest without real data. Please check your credentials."
+            )
         
-        logger.info(f"Starting REAL DATA backtest {backtest_id} for {len(request.symbols)} stocks")
+        backtest_id = f"real_bt_{int(datetime.now().timestamp())}"
+        
+        logger.info(f"🚀 Starting REAL DATA ONLY backtest {backtest_id} for {len(request.symbols)} stocks")
         
         active_backtests[backtest_id] = {
             "status": "running",
             "progress": 0,
-            "message": "Fetching real NSE historical data..."
+            "message": "Authenticating with Angel One API...",
+            "data_source": "Angel One Real API"
         }
         
         background_tasks.add_task(
-            run_real_backtest_background,
+            run_real_data_backtest_background,
             backtest_id,
             request
         )
@@ -106,62 +135,71 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         return {
             "backtest_id": backtest_id,
             "status": "started",
-            "message": "Real data backtest started successfully"
+            "message": "REAL DATA backtest started with Angel One API",
+            "data_source": "Angel One Real API"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error starting backtest: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error starting real data backtest: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start real data backtest: {str(e)}")
 
-async def run_real_backtest_background(backtest_id: str, request: BacktestRequest):
-    """Background task to run backtest with real data"""
+async def run_real_data_backtest_background(backtest_id: str, request: BacktestRequest):
+    """Background task for REAL DATA backtest ONLY"""
     try:
+        # Double-check authentication
+        if not angel_one_service.is_authenticated:
+            active_backtests[backtest_id] = {
+                "status": "failed",
+                "progress": 0,
+                "message": "Angel One API not authenticated - cannot proceed with real data backtest"
+            }
+            return
+        
         # Update progress
-        active_backtests[backtest_id]["message"] = "Fetching real historical data from Angel One..."
+        active_backtests[backtest_id]["message"] = "Fetching REAL historical data from Angel One API..."
         active_backtests[backtest_id]["progress"] = 20
         
-        # Get REAL historical data
+        # Get REAL historical data ONLY
         historical_data = await angel_one_service.get_multiple_historical_data(
             request.symbols,
             request.start_date,
             request.end_date
         )
         
-        active_backtests[backtest_id]["message"] = "Running strategy on real market data..."
+        active_backtests[backtest_id]["message"] = "Analyzing REAL market data patterns..."
         active_backtests[backtest_id]["progress"] = 60
         
         if not historical_data:
-            raise Exception("No historical data available for selected stocks")
+            raise Exception("No REAL historical data available from Angel One API for selected stocks")
         
-        # Generate results based on real data patterns
-        total_trades = len(historical_data) * random.randint(3, 8)
-        winning_trades = int(total_trades * random.uniform(0.4, 0.8))
-        
-        # Create sample trades
+        # Process real data (implement your strategy logic here)
+        total_trades = 0
+        winning_trades = 0
         trades = []
-        for i in range(min(total_trades, 20)):  # Limit to 20 trades for demo
-            symbol = random.choice(request.symbols)
-            entry_date = datetime.now() - timedelta(days=random.randint(1, 365))
-            exit_date = entry_date + timedelta(days=random.randint(1, 30))
-            entry_price = random.uniform(100, 3000)
-            
-            if random.random() < 0.6:  # 60% win rate
-                exit_price = entry_price * random.uniform(1.01, 1.15)
-            else:
-                exit_price = entry_price * random.uniform(0.85, 0.99)
+        
+        for symbol, data in historical_data.items():
+            if data.empty:
+                continue
                 
-            quantity = random.randint(1, 100)
-            pnl = (exit_price - entry_price) * quantity
+            # Detect real patterns
+            patterns = angel_one_service.detect_hammer_patterns(data, "hammer")
             
-            trades.append({
-                "symbol": symbol,
-                "entry_date": entry_date.strftime("%Y-%m-%d"),
-                "exit_date": exit_date.strftime("%Y-%m-%d"),
-                "entry_price": round(entry_price, 2),
-                "exit_price": round(exit_price, 2),
-                "quantity": quantity,
-                "pnl": round(pnl, 2)
-            })
+            for pattern in patterns:
+                # Create trade from real pattern
+                trades.append({
+                    "symbol": symbol,
+                    "entry_date": pattern['timestamp'].strftime("%Y-%m-%d %H:%M"),
+                    "exit_date": pattern['timestamp'].strftime("%Y-%m-%d %H:%M"),
+                    "entry_price": pattern['entry_price'],
+                    "exit_price": pattern['entry_price'],  # Simplified for demo
+                    "quantity": 10,
+                    "pnl": 0,  # Calculate based on your strategy
+                    "confidence": pattern['confidence'],
+                    "data_source": "Angel One Real API"
+                })
+                total_trades += 1
         
         total_pnl = sum(t["pnl"] for t in trades)
         total_return = (total_pnl / request.initial_capital) * 100
@@ -169,40 +207,48 @@ async def run_real_backtest_background(backtest_id: str, request: BacktestReques
         result = {
             "final_capital": request.initial_capital + total_pnl,
             "total_return": round(total_return, 2),
-            "sharpe_ratio": round(random.uniform(0.5, 2.5), 2),
-            "max_drawdown": round(random.uniform(5, 25), 2),
             "total_trades": total_trades,
-            "win_rate": round((winning_trades / total_trades) * 100, 2),
+            "win_rate": round((winning_trades / max(total_trades, 1)) * 100, 2),
             "trades": trades,
-            "data_source": "Angel One Real Data",
-            "stocks_processed": len(historical_data)
+            "data_source": "Angel One Real API",
+            "stocks_processed": len(historical_data),
+            "authentication_confirmed": True,
+            "fake_data_used": False
         }
         
         active_backtests[backtest_id] = {
             "status": "completed",
             "progress": 100,
-            "message": "Backtest completed with real NSE data",
+            "message": "REAL DATA backtest completed successfully",
             "result": result
         }
         
-        logger.info(f"✅ Real data backtest {backtest_id} completed successfully")
+        logger.info(f"✅ REAL DATA backtest {backtest_id} completed with {total_trades} trades")
         
     except Exception as e:
-        logger.error(f"Real backtest {backtest_id} failed: {str(e)}")
+        logger.error(f"❌ REAL DATA backtest {backtest_id} failed: {str(e)}")
         active_backtests[backtest_id] = {
             "status": "failed",
             "progress": 0,
-            "message": f"Backtest failed: {str(e)}"
+            "message": f"REAL DATA backtest failed: {str(e)}"
         }
+
 
 @app.post("/api/backtest/hammer")
 async def run_hammer_backtest(request: HammerBacktestRequest):
-    """Run hammer pattern backtest"""
+    """Run hammer pattern backtest with REAL data ONLY"""
     try:
-        logger.info(f"Starting {request.strategy} backtest for {len(request.stocks)} stocks")
+        # STRICT CHECK: Must be authenticated
+        if not angel_one_service.is_authenticated:
+            raise HTTPException(
+                status_code=503,
+                detail="Angel One API not authenticated. Cannot run hammer backtest without real data."
+            )
         
-        # Your existing backtest engine code here
-        backtest_engine = BacktestEngine()
+        logger.info(f"🔨 Starting REAL DATA {request.strategy} backtest for {len(request.stocks)} stocks")
+        
+        # Use the new RealDataBacktestEngine
+        backtest_engine = RealDataBacktestEngine()
         results = await backtest_engine.run_hammer_analysis(
             stocks=request.stocks,
             strategy=request.strategy,
@@ -212,12 +258,18 @@ async def run_hammer_backtest(request: HammerBacktestRequest):
             end_date=request.end_date
         )
         
+        # Add real data confirmation
+        results['data_source'] = 'Angel One Real API'
+        results['authentication_status'] = 'Authenticated'
+        results['fake_data_used'] = False
+        
         return results
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Hammer backtest error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-
+        logger.error(f"❌ Real hammer backtest error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Real data backtest failed: {str(e)}")
 
 
 @app.get("/api/stocks/sectors")
@@ -232,6 +284,16 @@ async def get_sectors():
         {"id": "telecom", "name": "Telecommunications"},
         {"id": "consumer", "name": "Consumer Goods"}
     ]
+
+@app.get("/api/auth/check")
+async def check_authentication():
+    """Check Angel One API authentication status"""
+    return {
+        "authenticated": angel_one_service.is_authenticated,
+        "status": "Connected to Angel One API" if angel_one_service.is_authenticated else "Not authenticated",
+        "can_get_real_data": angel_one_service.is_authenticated,
+        "message": "Ready for real data analysis" if angel_one_service.is_authenticated else "Please check Angel One credentials"
+    }
 
 @app.get("/api/strategies/types")
 async def get_strategy_types():
@@ -323,61 +385,6 @@ async def get_backtest_result(backtest_id: str):
     
     return backtest_info["result"]
 
-# ADD THIS TEMPORARY DEBUG ENDPOINT to your main.py
-# FIXED DEBUG ENDPOINT - Replace the old one with this
-@app.get("/api/debug/sbin-data")
-async def debug_sbin_data():
-    """Debug endpoint to check SBIN data format - JSON safe"""
-    try:
-        from .services.angel_one_service import angel_one_service
-        
-        # Get 7 days of SBIN data
-        end_date = "2025-09-13"
-        start_date = "2025-09-06"
-        
-        data = await angel_one_service.get_historical_data("SBIN", start_date, end_date)
-        
-        if data.empty:
-            return {"error": "No data received"}
-        
-        # FIXED: Convert to JSON-safe format
-        debug_info = {
-            "data_shape": [int(data.shape[0]), int(data.shape[1])],
-            "columns": [str(col) for col in data.columns],
-            "index_type": str(type(data.index)),
-            "total_rows": int(len(data)),
-            "sample_index": str(data.index[0]) if len(data) > 0 else "No index",
-            "data_types": {str(k): str(v) for k, v in data.dtypes.to_dict().items()}
-        }
-        
-        # Add first 5 rows - SAFELY converted
-        if len(data) > 0:
-            first_rows = []
-            for i in range(min(5, len(data))):
-                row_dict = {}
-                for col in data.columns:
-                    val = data.iloc[i][col]
-                    # Convert numpy types to Python types
-                    if hasattr(val, 'item'):  # numpy scalar
-                        row_dict[str(col)] = float(val.item())
-                    else:
-                        row_dict[str(col)] = float(val) if val is not None else None
-                row_dict['index'] = str(data.index[i])
-                first_rows.append(row_dict)
-            debug_info["first_5_rows"] = first_rows
-        else:
-            debug_info["first_5_rows"] = []
-        
-        return debug_info
-        
-    except Exception as e:
-        import traceback
-        return {
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
-
-# ... (keep other endpoints the same)
 
 if __name__ == "__main__":
     import uvicorn
