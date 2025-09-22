@@ -12,6 +12,7 @@ import random
 from .services.angel_one_service import angel_one_service
 from .services.backtest_engine import RealDataBacktestEngine 
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -233,12 +234,10 @@ async def run_real_data_backtest_background(backtest_id: str, request: BacktestR
             "message": f"REAL DATA backtest failed: {str(e)}"
         }
 
-
 @app.post("/api/backtest/hammer")
 async def run_hammer_backtest(request: HammerBacktestRequest):
     """Run hammer pattern backtest with REAL data ONLY"""
     try:
-        # STRICT CHECK: Must be authenticated
         if not angel_one_service.is_authenticated:
             raise HTTPException(
                 status_code=503,
@@ -258,7 +257,6 @@ async def run_hammer_backtest(request: HammerBacktestRequest):
             end_date=request.end_date
         )
         
-        # Add real data confirmation
         results['data_source'] = 'Angel One Real API'
         results['authentication_status'] = 'Authenticated'
         results['fake_data_used'] = False
