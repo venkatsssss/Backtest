@@ -1,0 +1,555 @@
+/* SageForge Hammer Pattern Backtesting - Responsive Styles */
+
+/* Large Desktop (1200px+) */
+@media (min-width: 1200px) {
+    .container {
+        padding: 25px;
+    }
+    
+    .header {
+        padding: 30px 40px;
+    }
+    
+    .box {
+        padding: 40px;
+    }
+    
+    .logo h1 {
+        font-size: 3.2rem;
+    }
+}
+
+/* Desktop (992px - 1199px) */
+@media (max-width: 1199px) {
+    .strategy-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .param-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+}
+
+/* Tablet (768px - 991px) */
+@media (max-width: 991px) {
+    .container {
+        padding: 15px;
+    }
+    
+    .header {
+        padding: 20px 25px;
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .logo h1 {
+        font-size: 2.4rem;
+    }
+    
+    .box {
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+    
+    .box h2 {
+        font-size: 1.4rem;
+        margin-bottom: 20px;
+    }
+    
+    .sector-tabs {
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .tab-btn {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+    
+    .search-container input {
+        padding: 12px 15px;
+    }
+    
+    .selection-info {
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+    }
+    
+    .strategy-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .strategy-card {
+        padding: 20px;
+    }
+    
+    .strategy-icon {
+        font-size: 2.5rem;
+        margin-right: 15px;
+    }
+    
+    .strategy-content h4 {
+        font-size: 1.2rem;
+    }
+    
+    .param-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .period-presets {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .period-card {
+        padding: 15px;
+    }
+    
+    .custom-inputs {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .start-btn {
+        padding: 16px 40px;
+        font-size: 1.1rem;
+    }
+    
+    .progress-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .progress-percent {
+        align-self: center;
+        font-size: 1.2rem;
+    }
+    
+    .results-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .metric-card {
+        padding: 20px;
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .metric-icon {
+        margin-right: 0;
+        margin-bottom: 10px;
+        font-size: 1.8rem;
+    }
+    
+    .metric-value {
+        font-size: 1.8rem;
+    }
+    
+    .performance-item {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .trade-breakdown {
+        justify-content: center;
+    }
+}
+
+/* Mobile Large (576px - 767px) */
+@media (max-width: 767px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header {
+        padding: 15px 20px;
+    }
+    
+    .logo h1 {
+        font-size: 2rem;
+    }
+    
+    .tagline {
+        font-size: 0.8rem;
+    }
+    
+    .box {
+        padding: 20px;
+        margin-bottom: 15px;
+    }
+    
+    .box h2 {
+        font-size: 1.3rem;
+        margin-bottom: 15px;
+    }
+    
+    .sector-tabs {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .search-container input {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+    
+    .stock-list {
+        max-height: 250px;
+        padding: 15px;
+    }
+    
+    .stock-item {
+        padding: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .stock-item input[type="checkbox"] {
+        margin-right: 0;
+        margin-bottom: 5px;
+    }
+    
+    .strategy-card {
+        padding: 15px;
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .strategy-icon {
+        margin-right: 0;
+        margin-bottom: 10px;
+        font-size: 2.5rem;
+    }
+    
+    .strategy-content h4 {
+        font-size: 1.1rem;
+    }
+    
+    .parameters-section {
+        padding: 20px;
+    }
+    
+    .param-item label {
+        font-size: 0.9rem;
+    }
+    
+    .param-item input {
+        padding: 10px 12px;
+        font-size: 1rem;
+    }
+    
+    .timeframe-badge {
+        padding: 10px 15px;
+        font-size: 0.85rem;
+    }
+    
+    .period-presets {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .period-card {
+        padding: 12px;
+    }
+    
+    .period-card h3 {
+        font-size: 1.1rem;
+    }
+    
+    .custom-period {
+        padding: 15px;
+    }
+    
+    .custom-inputs {
+        gap: 12px;
+    }
+    
+    .date-input-group {
+        min-width: unset;
+    }
+    
+    .start-btn {
+        padding: 14px 30px;
+        font-size: 1rem;
+        border-radius: 25px;
+    }
+    
+    .progress-section {
+        padding: 25px;
+    }
+    
+    .progress-section h3 {
+        font-size: 1.2rem;
+        margin-bottom: 20px;
+    }
+    
+    .progress-bar {
+        height: 10px;
+    }
+    
+    .results-section {
+        padding: 25px;
+    }
+    
+    .results-section h2 {
+        font-size: 1.5rem;
+        margin-bottom: 25px;
+    }
+    
+    .results-summary {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .metric-card {
+        padding: 15px;
+    }
+    
+    .metric-value {
+        font-size: 1.6rem;
+    }
+    
+    .summary-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .summary-item {
+        padding: 12px;
+    }
+    
+    .performance-item {
+        padding: 15px;
+    }
+    
+    .stock-symbol {
+        font-size: 0.9rem;
+    }
+    
+    .patterns-found {
+        font-size: 0.8rem;
+    }
+    
+    .success-rate {
+        font-size: 1rem;
+        padding: 4px 10px;
+        min-width: 70px;
+    }
+}
+
+/* Mobile Small (480px - 575px) */
+@media (max-width: 575px) {
+    .logo h1 {
+        font-size: 1.8rem;
+    }
+    
+    .box {
+        padding: 15px;
+    }
+    
+    .sector-tabs {
+        gap: 4px;
+    }
+    
+    .tab-btn {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    
+    .strategy-icon {
+        font-size: 2rem;
+    }
+    
+    .start-btn {
+        padding: 12px 25px;
+        font-size: 0.9rem;
+    }
+    
+    .metric-value {
+        font-size: 1.4rem;
+    }
+    
+    .export-btn {
+        padding: 10px 20px;
+        font-size: 0.85rem;
+    }
+}
+
+/* Mobile Extra Small (320px - 479px) */
+@media (max-width: 479px) {
+    .container {
+        padding: 8px;
+    }
+    
+    .header {
+        padding: 12px 15px;
+    }
+    
+    .logo h1 {
+        font-size: 1.6rem;
+    }
+    
+    .box {
+        padding: 12px;
+    }
+    
+    .box h2 {
+        font-size: 1.2rem;
+    }
+    
+    .tab-btn {
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+    
+    .search-container input {
+        padding: 8px 10px;
+    }
+    
+    .stock-list {
+        max-height: 200px;
+        padding: 10px;
+    }
+    
+    .strategy-card {
+        padding: 12px;
+    }
+    
+    .param-item input {
+        padding: 8px 10px;
+    }
+    
+    .start-btn {
+        padding: 10px 20px;
+        font-size: 0.85rem;
+    }
+    
+    .progress-section,
+    .results-section {
+        padding: 15px;
+    }
+    
+    .metric-card {
+        padding: 12px;
+    }
+    
+    .performance-item {
+        padding: 12px;
+    }
+}
+
+/* Landscape Orientation for Mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .stock-list {
+        max-height: 150px;
+    }
+    
+    .progress-section {
+        padding: 20px;
+    }
+    
+    .results-section {
+        padding: 20px;
+    }
+    
+    .box h2 {
+        margin-bottom: 15px;
+    }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .logo h1 {
+        text-shadow: 0 1px 4px rgba(255, 107, 107, 0.3);
+    }
+    
+    .metric-value {
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Touch Device Optimizations */
+@media (pointer: coarse) {
+    .tab-btn,
+    .strategy-card,
+    .period-card,
+    .stock-item {
+        min-height: 44px;
+    }
+    
+    .start-btn {
+        min-height: 50px;
+    }
+    
+    input[type="checkbox"] {
+        min-width: 20px;
+        min-height: 20px;
+    }
+    
+    .export-btn {
+        min-height: 44px;
+    }
+}
+
+/* Reduce Motion for Accessibility */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    
+    .dot {
+        animation: none;
+    }
+    
+    .progress-fill::after {
+        animation: none;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    /* Already optimized for dark mode */
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    .box {
+        border: 2px solid #fff;
+    }
+    
+    .tab-btn,
+    .strategy-card,
+    .period-card {
+        border: 2px solid #fff;
+    }
+    
+    .tab-btn.active,
+    .strategy-card.active,
+    .period-card.active {
+        background: #ff6b6b;
+        border: 2px solid #fff;
+    }
+}

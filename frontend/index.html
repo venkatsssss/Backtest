@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SageForge - Hammer Pattern Backtesting</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/responsive.css">
+
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <h1>SageForge</h1>
+            <span class="tagline">Hammer Pattern Backtesting Engine</span>
+        </div>
+        <div id="marketStatus" class="status">
+            <span class="dot connecting"></span>
+            <span>Connecting...</span>
+        </div>
+    </header>
+
+    <!-- Main Container - 3 Vertical Columns -->
+    <div class="main-container">
+        <!-- Column 1: Stock Selection -->
+        <div class="column">
+            <div class="box" id="stockBox">
+                <h2>📈 Select NSE Stocks</h2>
+                <div class="sector-tabs">
+                    <button class="tab-btn active" data-sector="all">All</button>
+                    <button class="tab-btn" data-sector="banking">Banking</button>
+                    <button class="tab-btn" data-sector="it">IT</button>
+                    <button class="tab-btn" data-sector="fmcg">FMCG</button>
+                    <button class="tab-btn" data-sector="pharma">Pharma</button>
+                </div>
+                
+                <div class="search-container">
+                    <input type="text" id="stockSearch" placeholder="Search stocks...">
+                </div>
+                
+                <div class="selection-info">
+                    <span>Selected: <strong id="selectedCount">0</strong> stocks</span>
+                    <div class="selection-buttons">
+                        <button id="selectAll" class="select-all-btn">Select All</button>
+                        <button id="clearStocks" class="clear-btn">Clear</button>
+                    </div>
+                </div>
+                
+                <div class="stock-list" id="stockList">
+                    <div class="loading">🔄 Loading stocks...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2: Strategy & Parameters -->
+        <div class="column">
+            <div class="box" id="strategyBox">
+                <h2>🔨 Strategy & Parameters</h2>
+                
+                <div class="strategy-section">
+                    <h3>Choose Pattern</h3>
+                    <div class="strategy-cards">
+                        <div class="strategy-card active" data-strategy="hammer">
+                            <div class="strategy-icon">🔨</div>
+                            <div class="strategy-content">
+                                <h4>Hammer</h4>
+                                <p>Long lower shadow</p>
+                            </div>
+                        </div>
+                        
+                        <div class="strategy-card" data-strategy="inverted_hammer">
+                            <div class="strategy-icon">🔨↑</div>
+                            <div class="strategy-content">
+                                <h4>Inverted Hammer</h4>
+                                <p>Long upper shadow</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="parameters-section">
+                    <h3>Set Parameters</h3>
+                    <div class="param-group">
+                        <label for="targetPercent">🎯 Target Profit %</label>
+                        <input type="number" id="targetPercent" value="3.0" min="0.5" max="50" step="0.1">
+                        <small>Expected profit when pattern succeeds</small>
+                    </div>
+                    
+                    <div class="param-group">
+                        <label for="stopLossPercent">🛑 Stop Loss %</label>
+                        <input type="number" id="stopLossPercent" value="2.0" min="0.5" max="20" step="0.1">
+                        <small>Maximum acceptable loss</small>
+                    </div>
+                    
+                    <div class="timeframe-info">
+                        📊 15-Minute Analysis
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Period Selection -->
+        <div class="column">
+            <div class="box" id="periodBox">
+                <h2>📅 Testing Period</h2>
+                
+                <div class="period-options">
+                    <div class="period-card active" data-period="1">
+                        <h4>1 Month</h4>
+                        <p>Last 30 days</p>
+                    </div>
+                    <div class="period-card" data-period="3">
+                        <h4>3 Months</h4>
+                        <p>Last 90 days</p>
+                    </div>
+                    <div class="period-card" data-period="6">
+                        <h4>6 Months</h4>
+                        <p>Last 180 days</p>
+                    </div>
+                    <div class="period-card" data-period="12">
+                        <h4>12 Months</h4>
+                        <p>Last 365 days</p>
+                    </div>
+                </div>
+                
+                <div class="custom-period">
+                    <label class="custom-toggle">
+                        <input type="checkbox" id="customPeriod">
+                        <span>Custom Period</span>
+                    </label>
+                    <div class="custom-inputs" id="customInputs" style="display: none;">
+                        <div class="date-group">
+                            <label>Start Date</label>
+                            <input type="date" id="startDate">
+                        </div>
+                        <div class="date-group">
+                            <label>End Date</label>
+                            <input type="date" id="endDate">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Analysis Button -->
+    <div class="analysis-button-section">
+        <button id="startHammerAnalysis" class="start-btn">
+            🚀 Start Hammer Pattern Analysis
+        </button>
+    </div>
+
+    <!-- Progress Section -->
+    <div class="progress-section" id="progressSection" style="display: none;">
+        <h3>🔍 Analyzing Patterns...</h3>
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <span class="progress-percent" id="progressPercent">0%</span>
+        </div>
+        <div class="progress-details" id="progressDetails">Starting analysis...</div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="results-section" id="resultsSection" style="display: none;">
+        <h2>📊 Analysis Results</h2>
+        
+        <div class="results-summary">
+            <div class="metric-card success">
+                <div class="metric-icon">✅</div>
+                <div class="metric-content">
+                    <h3>Success Rate</h3>
+                    <div class="metric-value" id="successRate">0%</div>
+                    <small>Hit target profit</small>
+                </div>
+            </div>
+            
+            <div class="metric-card failure">
+                <div class="metric-icon">❌</div>
+                <div class="metric-content">
+                    <h3>Failure Rate</h3>
+                    <div class="metric-value" id="failureRate">0%</div>
+                    <small>Hit stop loss</small>
+                </div>
+            </div>
+            
+            <div class="metric-card partial">
+                <div class="metric-icon">⚠️</div>
+                <div class="metric-content">
+                    <h3>Partial Success</h3>
+                    <div class="metric-value" id="partialRate">0%</div>
+                    <small>Some profit</small>
+                </div>
+            </div>
+            
+            <div class="metric-card total">
+                <div class="metric-icon">📊</div>
+                <div class="metric-content">
+                    <h3>Total Patterns</h3>
+                    <div class="metric-value" id="totalPatterns">0</div>
+                    <small>Patterns found</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-details" id="resultsDetails">
+            <!-- Summary will be populated here -->
+        </div>
+
+        <!-- Detailed Trade Information Table -->
+        <div class="detailed-trades-section">
+            <h3>🔍 Detailed Trade Information</h3>
+            <p class="trade-info">Complete details of all pattern trades detected:</p>
+            <div class="trades-table-container">
+                <table class="trades-table" id="tradesTable">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Stock</th>
+                            <th>Pattern</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>Target Price</th>
+                            <th>Stop Loss</th>
+                            <th>Outcome</th>
+                            <th>Points Gained</th>
+                            <th>% Gain/Loss</th>
+                            <th>Days Held</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTableBody">
+                        <!-- Trade rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+
+ 
+    
+</body>
+</html>
