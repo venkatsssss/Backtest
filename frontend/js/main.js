@@ -26,7 +26,7 @@ class SageForgeApp {
 
     async checkAPIHealth() {
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/health');
+            const API_BASE = 'https://your-render-app-name.onrender.com/api';
             const health = await response.json();
             const statusElement = document.getElementById('marketStatus');
             if (health.status === 'healthy') {
