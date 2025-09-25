@@ -1,9 +1,23 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pandas==2.1.4
-numpy==1.24.3
-python-dotenv==1.0.0
-smartapi-python==1.2.0
-pyotp==2.9.0
-requests==2.31.0
-python-multipart==0.0.6
+services:
+  - type: web
+    name: sageforge-backtesting
+    env: python
+    runtime: python-3.11.9
+    region: oregon
+    plan: starter
+    buildCommand: |
+      python --version
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ANGEL_ONE_API_KEY
+        sync: false
+      - key: ANGEL_ONE_CLIENT_ID  
+        sync: false
+      - key: ANGEL_ONE_PASSWORD
+        sync: false
+      - key: ANGEL_ONE_TOTP_SECRET
+        sync: false
