@@ -344,19 +344,10 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     
-    # Use uvicorn for development, gunicorn handles production
-    if Config.DEBUG:
-        uvicorn.run(
-            "main:app",
-            host=host,
-            port=port,
-            reload=True,
-            log_level="info"
-        )
-    else:
-        uvicorn.run(
-            "main:app",
-            host=host,
-            port=port,
-            log_level="info"
-        )
+    # Simple uvicorn startup for Render
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        log_level="info"
+    )
