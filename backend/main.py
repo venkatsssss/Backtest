@@ -1,45 +1,141 @@
 import os
 import logging
-import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import pandas as pd
 
-# FIXED: Import from services with proper error handling
+# FIXED: Import from services subdirectory
 try:
     from services.angel_one_fallback import AngelOneFallbackService as AngelOneService
-except ImportError:
-    # Fallback if services directory structure is different
-    try:
-        from angel_one_fallback import AngelOneFallbackService as AngelOneService
-    except ImportError:
-        logging.error("Could not import AngelOneService")
-        raise
-
-try:
     from services.backtest_engine import BacktestEngine
-except ImportError:
-    try:
-        from backtest_engine import BacktestEngine
-    except ImportError:
-        logging.error("Could not import BacktestEngine")
-        raise
+    logger = logging.getLogger(__name__)
+    logger.info("Successfully imported services")
+except ImportError as e:
+    logging.error(f"Import error: {e}")
+    raise
 
-# Import config with fallback
-try:
-    from config import Config
-except ImportError:
-    # Create minimal config if file doesn't exist
-    class Config:
-        DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
-        HOST = os.getenv('HOST', '0.0.0.0')
-        PORT = int(os.getenv('PORT', 8000))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Initialize FastAPI
+app = FastAPI(
+    title="SageForge Backtesting API",
+    version="2.0.0"
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize services
+angel_service = AngelOneService()
+backtest_engine = BacktestEngine()
+
+# Models
+class HammerBacktestRequest(BaseModel):
+    stocks: List[str]
+    strategy: str
+    target_percent: float
+    stop_loss_percent: float
+    start_date: str
+    end_date: str
+    timeframe: str = "15min"
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Starting SageForge API...")
+    try:
+        success = await angel_service.authenticate()
+        if success:
+            logger.info("Angel One connected")
+        else:
+            logger.warning("Using demo mode")
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+
+@app.get("/")
+async def root():
+    return {"message": "SageForge API", "status": "running"}
+
+@app.get("/api/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "angel_one_connected": angel_service.is_authenticated
+    }
+
+@app.get("/api/stocks")
+async def get_stocks(sector: str = "all"):
+    try:
+        stocks = await angel_service.get_nse_stocks(sector)
+        return stocks
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stocks/sectors")
+async def get_sectors():
+    return [
+        {"id": "all", "name": "All Stocks"},
+        {"id": "banking", "name": "Banking"},
+        {"id": "it", "name": "IT"},
+        {"id": "fmcg", "name": "FMCG"},
+        {"id": "pharma", "name": "Pharma"}
+    ]
+
+@app.get("/api/strategies/types")
+async def get_strategy_types():
+    return [{"id": "hammer", "name": "Hammer Pattern"}]
+
+@app.get("/api/periods/presets")
+async def get_period_presets():
+    today = datetime.now()
+    return [
+        {
+            "id": "1month",
+            "name": "1 Month",
+            "start_date": (today - timedelta(days=30)).strftime("%Y-%m-%d"),
+            "end_date": today.strftime("%Y-%m-%d")
+        }
+    ]
+
+@app.post("/api/backtest/hammer")
+async def run_hammer_backtest(request: HammerBacktestRequest):
+    try:
+        logger.info(f"Starting analysis for {len(request.stocks)} stocks")
+        
+        results = await backtest_engine.run_hammer_analysis(
+            stocks=request.stocks,
+            strategy=request.strategy,
+            target_percent=request.target_percent,
+            stop_loss_percent=request.stop_loss_percent,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            angel_service=angel_service
+        )
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Backtest error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
 
 # Configure logging for production
 logging.basicConfig(
