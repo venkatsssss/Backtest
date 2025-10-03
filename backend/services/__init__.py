@@ -1,7 +1,4 @@
-# SageForge Services Package
-# This file makes the services directory a Python package
-
-from .angel_one_service import AngelOneService
+from .angel_one_fallback import AngelOneFallbackService
 from .backtest_engine import BacktestEngine
 
-__all__ = ['AngelOneService', 'BacktestEngine']
+__all__ = ['AngelOneFallbackService', 'BacktestEngine']
