@@ -9,8 +9,8 @@ from pydantic import BaseModel
 
 # FIXED: Import from services subdirectory
 try:
-    from services.angel_one_fallback import AngelOneFallbackService as AngelOneService
-    from services.backtest_engine import BacktestEngine
+    from services.angel_one_service import AngelOneService
+    from .angel_one_service import AngelOneService
     logger = logging.getLogger(__name__)
     logger.info("Successfully imported services")
 except ImportError as e:
