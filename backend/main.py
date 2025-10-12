@@ -3,314 +3,18 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-# FIXED: Import from services subdirectory
-try:
-    from services.angel_one_service import AngelOneService
-    from .angel_one_service import AngelOneService
-    logger = logging.getLogger(__name__)
-    logger.info("Successfully imported services")
-except ImportError as e:
-    logging.error(f"Import error: {e}")
-    raise
+# Import services
+from services.angel_one_service import AngelOneFallbackService
+from services.backtest_engine import BacktestEngine
+from config import Config
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize FastAPI
-app = FastAPI(
-    title="SageForge Backtesting API",
-    version="2.0.0"
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize services
-angel_service = AngelOneService()
-backtest_engine = BacktestEngine()
-
-# Models
-class HammerBacktestRequest(BaseModel):
-    stocks: List[str]
-    strategy: str
-    target_percent: float
-    stop_loss_percent: float
-    start_date: str
-    end_date: str
-    timeframe: str = "15min"
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting SageForge API...")
-    try:
-        success = await angel_service.authenticate()
-        if success:
-            logger.info("Angel One connected")
-        else:
-            logger.warning("Using demo mode")
-    except Exception as e:
-        logger.error(f"Startup error: {e}")
-
-@app.get("/")
-async def root():
-    return {"message": "SageForge API", "status": "running"}
-
-@app.get("/api/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "angel_one_connected": angel_service.is_authenticated
-    }
-
-@app.get("/api/stocks")
-async def get_stocks(sector: str = "all"):
-    try:
-        stocks = await angel_service.get_nse_stocks(sector)
-        return stocks
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/stocks/sectors")
-async def get_sectors():
-    return [
-        {"id": "all", "name": "All Stocks"},
-        {"id": "banking", "name": "Banking"},
-        {"id": "it", "name": "IT"},
-        {"id": "fmcg", "name": "FMCG"},
-        {"id": "pharma", "name": "Pharma"}
-    ]
-
-@app.get("/api/strategies/types")
-async def get_strategy_types():
-    return [{"id": "hammer", "name": "Hammer Pattern"}]
-
-@app.get("/api/periods/presets")
-async def get_period_presets():
-    today = datetime.now()
-    return [
-        {
-            "id": "1month",
-            "name": "1 Month",
-            "start_date": (today - timedelta(days=30)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d")
-        }
-    ]
-
-@app.post("/api/backtest/hammer")
-async def run_hammer_backtest(request: HammerBacktestRequest):
-    try:
-        logger.info(f"Starting analysis for {len(request.stocks)} stocks")
-        
-        results = await backtest_engine.run_hammer_analysis(
-            stocks=request.stocks,
-            strategy=request.strategy,
-            target_percent=request.target_percent,
-            stop_loss_percent=request.stop_loss_percent,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            angel_service=angel_service
-        )
-        
-        return results
-        
-    except Exception as e:
-        logger.error(f"Backtest error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
-
-# Configure logging for production
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="SageForge Hammer Pattern Backtesting API",
-    description="Real-time NSE stock analysis using Angel One API",
-    version="2.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc"
-)
-
-# Production CORS settings
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-# Initialize services
-angel_service = AngelOneService()
-backtest_engine = BacktestEngine()
-
-# Request Models
-class HammerBacktestRequest(BaseModel):
-    stocks: List[str]
-    strategy: str
-    target_percent: float
-    stop_loss_percent: float
-    start_date: str
-    end_date: str
-    timeframe: str = "15min"
-
-class BacktestRequest(BaseModel):
-    symbols: List[str]
-    strategy_type: str
-    start_date: str
-    end_date: str
-    initial_capital: Optional[float] = 100000
-
-# Global storage
-active_backtests = {}
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize Angel One connection on startup"""
-    logger.info("Starting SageForge API...")
-    try:
-        success = await angel_service.authenticate()
-        if success:
-            logger.info("Angel One API connected successfully")
-        else:
-            logger.warning("Angel One API authentication failed - using demo mode")
-    except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "SageForge Backtesting API",
-        "status": "running",
-        "version": "2.0.0"
-    }
-
-@app.get("/api/health")
-async def health_check():
-    """API health status"""
-    return {
-        "status": "healthy" if angel_service.is_authenticated else "demo_mode",
-        "timestamp": datetime.now().isoformat(),
-        "angel_one_connected": angel_service.is_authenticated
-    }
-
-@app.get("/api/stocks")
-async def get_stocks(sector: str = "all"):
-    """Get NSE stocks"""
-    try:
-        stocks = await angel_service.get_nse_stocks(sector)
-        logger.info(f"Retrieved {len(stocks)} stocks for sector: {sector}")
-        return stocks
-    except Exception as e:
-        logger.error(f"Error getting stocks: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/stocks/sectors")
-async def get_sectors():
-    """Get available sectors"""
-    return [
-        {"id": "all", "name": "All Stocks"},
-        {"id": "banking", "name": "Banking"},
-        {"id": "it", "name": "Information Technology"},
-        {"id": "fmcg", "name": "FMCG"},
-        {"id": "pharma", "name": "Pharmaceuticals"},
-        {"id": "consumer", "name": "Consumer Goods"},
-        {"id": "auto", "name": "Automobiles"}
-    ]
-
-@app.get("/api/strategies/types")
-async def get_strategy_types():
-    """Get strategy types"""
-    return [
-        {
-            "id": "hammer_pattern",
-            "name": "Hammer Pattern",
-            "description": "Bullish reversal candlestick pattern",
-            "category": "candlestick"
-        }
-    ]
-
-@app.get("/api/periods/presets")
-async def get_period_presets():
-    """Get period presets"""
-    today = datetime.now()
-    return [
-        {
-            "id": "1month",
-            "name": "Last 1 Month",
-            "start_date": (today - timedelta(days=30)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d")
-        },
-        {
-            "id": "3months",
-            "name": "Last 3 Months",
-            "start_date": (today - timedelta(days=90)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d")
-        }
-    ]
-
-@app.post("/api/backtest/hammer")
-async def run_hammer_backtest(request: HammerBacktestRequest):
-    """Run hammer pattern backtest"""
-    try:
-        logger.info(f"Starting {request.strategy} analysis for {len(request.stocks)} stocks")
-        
-        if not request.stocks:
-            raise HTTPException(status_code=400, detail="No stocks selected")
-        
-        results = await backtest_engine.run_hammer_analysis(
-            stocks=request.stocks,
-            strategy=request.strategy,
-            target_percent=request.target_percent,
-            stop_loss_percent=request.stop_loss_percent,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            angel_service=angel_service
-        )
-        
-        logger.info(f"Analysis completed: {results.get('total_patterns', 0)} patterns")
-        return results
-        
-    except Exception as e:
-        logger.error(f"Hammer backtest error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Production server
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    host = os.environ.get("HOST", "0.0.0.0")
-    
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        log_level="info"
-    )
-
-# Configure logging for production
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -329,20 +33,20 @@ app = FastAPI(
 # Production CORS settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific domains
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Initialize services
-angel_service = AngelOneService()
+angel_service = AngelOneFallbackService()
 backtest_engine = BacktestEngine()
 
 # Request Models
 class HammerBacktestRequest(BaseModel):
     stocks: List[str]
-    strategy: str  # "hammer" or "inverted_hammer"
+    strategy: str
     target_percent: float
     stop_loss_percent: float
     start_date: str
@@ -367,7 +71,6 @@ async def startup_event():
         success = await angel_service.authenticate()
         if success:
             logger.info("✅ Angel One API connected successfully")
-            # Load NSE instruments
             await angel_service.load_instruments()
         else:
             logger.warning("⚠️ Angel One API authentication failed - using demo mode")
@@ -378,6 +81,15 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("🛑 Shutting down SageForge API...")
+
+# Root endpoint
+@app.get("/")
+async def serve_frontend():
+    """Serve the main frontend page"""
+    if os.path.exists("frontend/index.html"):
+        return FileResponse("frontend/index.html")
+    else:
+        return {"message": "SageForge API is running", "docs": "/api/docs"}
 
 # Health Check
 @app.get("/api/health")
@@ -625,20 +337,11 @@ async def get_backtest_result(backtest_id: str):
 if os.path.exists("frontend"):
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
-@app.get("/")
-async def serve_frontend():
-    """Serve the main frontend page"""
-    if os.path.exists("frontend/index.html"):
-        return FileResponse("frontend/index.html")
-    else:
-        return {"message": "SageForge API is running", "docs": "/api/docs"}
-
 # Production server configuration
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     
-    # Simple uvicorn startup for Render
     uvicorn.run(
         "main:app",
         host=host,
