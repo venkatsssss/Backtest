@@ -1,18 +1,20 @@
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from typing import List
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+import uvicorn
 
-# Import services
-from services.angel_one_service import AngelOneFallbackService
-from services.backtest_engine import BacktestEngine
 from config import Config
+from models.schemas import (
+    BacktestRequest, BacktestResponse, StockInfo, HealthResponse
+)
+from services.angel_one_service import AngelOneService
+from services.backtest_engine import BacktestEngine
+from utils.excel_export import ExcelExporter
 
 # Configure logging
 logging.basicConfig(
@@ -21,100 +23,82 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+# Initialize FastAPI
 app = FastAPI(
-    title="SageForge Hammer Pattern Backtesting API",
-    description="Real-time NSE stock analysis using Angel One API",
-    version="2.0.0",
-    docs_url="/api/docs" if Config.DEBUG else None,
-    redoc_url="/api/redoc" if Config.DEBUG else None
+    title="SageForge Backtesting API",
+    description="Hammer Pattern Backtesting for NSE Stocks",
+    version="1.0.0"
 )
 
-# Production CORS settings
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=Config.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Initialize services
-angel_service = AngelOneFallbackService()
+angel_service = AngelOneService()
 backtest_engine = BacktestEngine()
-
-# Request Models
-class HammerBacktestRequest(BaseModel):
-    stocks: List[str]
-    strategy: str
-    target_percent: float
-    stop_loss_percent: float
-    start_date: str
-    end_date: str
-    timeframe: str = "15min"
-
-class BacktestRequest(BaseModel):
-    symbols: List[str]
-    strategy_type: str
-    start_date: str
-    end_date: str
-    initial_capital: Optional[float] = 100000
-
-# Global storage for active backtests
-active_backtests = {}
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Angel One connection on startup"""
+    """Initialize services on startup"""
     logger.info("🚀 Starting SageForge API...")
     try:
         success = await angel_service.authenticate()
         if success:
-            logger.info("✅ Angel One API connected successfully")
-            await angel_service.load_instruments()
+            logger.info("✅ Angel One API connected")
         else:
-            logger.warning("⚠️ Angel One API authentication failed - using demo mode")
+            logger.warning("⚠️ Angel One authentication failed")
     except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
+        logger.error(f"Startup error: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("🛑 Shutting down SageForge API...")
+    try:
+        angel_service.logout()
+    except Exception as e:
+        logger.error(f"Shutdown error: {e}")
 
-# Root endpoint
 @app.get("/")
-async def serve_frontend():
-    """Serve the main frontend page"""
-    if os.path.exists("frontend/index.html"):
-        return FileResponse("frontend/index.html")
-    else:
-        return {"message": "SageForge API is running", "docs": "/api/docs"}
-
-# Health Check
-@app.get("/api/health")
-async def health_check():
-    """API health status"""
+async def root():
+    """Root endpoint"""
     return {
-        "status": "healthy" if angel_service.is_authenticated else "limited",
-        "timestamp": datetime.now().isoformat(),
-        "angel_one_connected": angel_service.is_authenticated,
-        "environment": "production" if not Config.DEBUG else "development"
+        "message": "SageForge Backtesting API",
+        "version": "1.0.0",
+        "status": "running"
     }
 
-# Stock Data Endpoints
-@app.get("/api/stocks")
+@app.get("/api/health", response_model=HealthResponse)
+async def health_check():
+    """Health check endpoint"""
+    return HealthResponse(
+        status="healthy" if angel_service.is_authenticated else "limited",
+        angel_one_connected=angel_service.is_authenticated,
+        timestamp=datetime.now().isoformat()
+    )
+
+@app.get("/api/stocks", response_model=List[StockInfo])
 async def get_stocks(sector: str = "all"):
-    """Get NSE stocks from Angel One API"""
+    """
+    Get NSE stocks list
+    
+    Query params:
+    - sector: Filter by sector (all, banking, it, fmcg, pharma, auto, oil_gas)
+    """
     try:
         stocks = await angel_service.get_nse_stocks(sector)
-        logger.info(f"Retrieved {len(stocks)} stocks for sector: {sector}")
         return stocks
     except Exception as e:
-        logger.error(f"Error getting stocks: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get stocks: {str(e)}")
+        logger.error(f"Error fetching stocks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/stocks/sectors")
+@app.get("/api/sectors")
 async def get_sectors():
     """Get available stock sectors"""
     return [
@@ -122,229 +106,181 @@ async def get_sectors():
         {"id": "banking", "name": "Banking"},
         {"id": "it", "name": "Information Technology"},
         {"id": "fmcg", "name": "FMCG"},
-        {"id": "oil_gas", "name": "Oil & Gas"},
         {"id": "pharma", "name": "Pharmaceuticals"},
-        {"id": "telecom", "name": "Telecommunications"},
-        {"id": "consumer", "name": "Consumer Goods"},
         {"id": "auto", "name": "Automobiles"},
-        {"id": "metals", "name": "Metals & Mining"}
+        {"id": "oil_gas", "name": "Oil & Gas"}
     ]
 
-# Strategy Endpoints
-@app.get("/api/strategies/types")
-async def get_strategy_types():
-    """Get available strategy types"""
+@app.get("/api/strategies")
+async def get_strategies():
+    """Get available trading strategies"""
     return [
         {
-            "id": "hammer_pattern",
+            "id": "hammer",
             "name": "Hammer Pattern",
-            "description": "Bullish reversal candlestick pattern with long lower shadow",
-            "category": "candlestick",
-            "expected_win_rate": "60-75%",
-            "risk_level": "medium",
-            "timeframe": "15-minute intraday"
+            "description": "Bullish reversal with long lower shadow"
         },
         {
             "id": "inverted_hammer",
-            "name": "Inverted Hammer Pattern", 
-            "description": "Potential reversal pattern with long upper shadow",
-            "category": "candlestick",
-            "expected_win_rate": "55-70%",
-            "risk_level": "medium-high",
-            "timeframe": "15-minute intraday"
+            "name": "Inverted Hammer",
+            "description": "Potential reversal with long upper shadow"
         }
     ]
 
-@app.get("/api/strategies/categories")
-async def get_strategy_categories():
-    """Get strategy categories"""
-    return [
-        {"id": "candlestick", "name": "Candlestick Patterns", "description": "Japanese candlestick pattern recognition"}
-    ]
-
-# Period Endpoints
-@app.get("/api/periods/presets")
-async def get_period_presets():
-    """Get predefined time periods"""
-    today = datetime.now()
-    return [
-        {
-            "id": "1month",
-            "name": "Last 1 Month",
-            "start_date": (today - timedelta(days=30)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d"),
-            "description": "Recent market patterns"
-        },
-        {
-            "id": "3months", 
-            "name": "Last 3 Months",
-            "start_date": (today - timedelta(days=90)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d"),
-            "description": "Quarterly analysis"
-        },
-        {
-            "id": "6months",
-            "name": "Last 6 Months", 
-            "start_date": (today - timedelta(days=180)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d"),
-            "description": "Medium-term patterns"
-        },
-        {
-            "id": "1year",
-            "name": "Last 1 Year",
-            "start_date": (today - timedelta(days=365)).strftime("%Y-%m-%d"),
-            "end_date": today.strftime("%Y-%m-%d"), 
-            "description": "Long-term validation"
-        }
-    ]
-
-# Main Backtesting Endpoints
-@app.post("/api/backtest/hammer")
-async def run_hammer_backtest(request: HammerBacktestRequest):
-    """Run hammer pattern backtest with real Angel One data"""
+@app.post("/api/backtest")
+async def run_backtest(request: BacktestRequest):
+    """
+    Run backtest analysis
+    
+    Request body:
+    - stocks: List of stock symbols
+    - strategy: 'hammer' or 'inverted_hammer'
+    - target_percent: Target profit percentage (0.1-50)
+    - stop_loss_percent: Stop loss percentage (0.1-20)
+    - start_date: Start date (YYYY-MM-DD)
+    - end_date: End date (YYYY-MM-DD)
+    - timeframe: Candle timeframe (default: 15min)
+    """
     try:
-        logger.info(f"🔨 Starting {request.strategy} analysis for {len(request.stocks)} stocks")
+        logger.info(f"🔨 Starting {request.strategy} backtest for {len(request.stocks)} stocks")
         
         # Validate inputs
-        if not request.stocks or len(request.stocks) == 0:
+        if not request.stocks:
             raise HTTPException(status_code=400, detail="No stocks selected")
         
-        if request.target_percent <= 0 or request.stop_loss_percent <= 0:
-            raise HTTPException(status_code=400, detail="Invalid target or stop loss percentage")
+        if not angel_service.is_authenticated:
+            raise HTTPException(
+                status_code=503,
+                detail="Angel One API not connected. Please check credentials."
+            )
         
-        # Run backtest with real Angel One data
-        results = await backtest_engine.run_hammer_analysis(
-            stocks=request.stocks,
-            strategy=request.strategy,
-            target_percent=request.target_percent,
-            stop_loss_percent=request.stop_loss_percent,
+        # Get historical data for all stocks
+        interval = Config.TIMEFRAME_MAP.get(request.timeframe, Config.DEFAULT_TIMEFRAME)
+        
+        historical_data = await angel_service.get_multiple_historical_data(
+            symbols=request.stocks,
             start_date=request.start_date,
             end_date=request.end_date,
-            angel_service=angel_service
+            interval=interval
         )
-        
-        logger.info(f"✅ Analysis completed: {results.get('total_patterns', 0)} patterns found")
-        return results
-        
-    except Exception as e:
-        logger.error(f"Hammer backtest error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-
-@app.post("/api/backtest/run")
-async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
-    """Run general backtest (legacy endpoint for compatibility)"""
-    try:
-        backtest_id = f"bt_{int(datetime.now().timestamp())}"
-        
-        logger.info(f"Starting backtest {backtest_id} for {len(request.symbols)} symbols")
-        
-        active_backtests[backtest_id] = {
-            "status": "running",
-            "progress": 0,
-            "message": "Initializing backtest..."
-        }
-        
-        background_tasks.add_task(
-            run_backtest_background,
-            backtest_id,
-            request
-        )
-        
-        return {
-            "backtest_id": backtest_id,
-            "status": "started",
-            "message": "Backtest started successfully"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error starting backtest: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def run_backtest_background(backtest_id: str, request: BacktestRequest):
-    """Background task for general backtesting"""
-    try:
-        active_backtests[backtest_id]["message"] = "Fetching historical data..."
-        active_backtests[backtest_id]["progress"] = 30
-        
-        # Get historical data
-        historical_data = {}
-        for symbol in request.symbols:
-            try:
-                data = await angel_service.get_historical_data(
-                    symbol, request.start_date, request.end_date
-                )
-                if not data.empty:
-                    historical_data[symbol] = data
-            except Exception as e:
-                logger.warning(f"Failed to get data for {symbol}: {e}")
-                continue
-        
-        active_backtests[backtest_id]["message"] = "Analyzing patterns..."
-        active_backtests[backtest_id]["progress"] = 70
         
         if not historical_data:
-            raise Exception("No historical data available")
+            raise HTTPException(
+                status_code=404,
+                detail="No historical data available for selected stocks"
+            )
         
-        # Simple analysis results
-        total_trades = len(historical_data) * 5
-        win_rate = 65.0
+        logger.info(f"Retrieved data for {len(historical_data)} stocks")
         
-        result = {
-            "total_trades": total_trades,
-            "win_rate": win_rate,
-            "total_return": 12.5,
-            "max_drawdown": 8.2,
-            "sharpe_ratio": 1.8,
-            "data_source": "Angel One API",
-            "symbols_analyzed": list(historical_data.keys())
-        }
+        # Run backtest
+        results = await backtest_engine.run_backtest(
+            historical_data=historical_data,
+            strategy=request.strategy,
+            target_percent=request.target_percent,
+            stop_loss_percent=request.stop_loss_percent
+        )
         
-        active_backtests[backtest_id] = {
-            "status": "completed",
-            "progress": 100,
-            "message": "Analysis completed",
-            "result": result
-        }
+        # Add metadata
+        results['strategy'] = request.strategy.replace('_', ' ').title()
+        results['period'] = f"{request.start_date} to {request.end_date}"
+        results['stocks_analyzed'] = len(request.stocks)
+        results['timeframe'] = request.timeframe
         
+        logger.info(f"✅ Backtest completed: {results['total_patterns']} patterns analyzed")
+        
+        return results
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Background backtest {backtest_id} failed: {e}")
-        active_backtests[backtest_id] = {
-            "status": "failed",
-            "progress": 0,
-            "message": f"Backtest failed: {str(e)}"
+        logger.error(f"Backtest error: {e}")
+        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
+@app.post("/api/backtest/download")
+async def download_backtest_excel(request: BacktestRequest):
+    """
+    Download backtest results as Excel file
+    
+    Same parameters as /api/backtest endpoint
+    Returns Excel file for download
+    """
+    try:
+        logger.info(f"Generating Excel report for {len(request.stocks)} stocks")
+        
+        # Run backtest (reuse logic)
+        if not angel_service.is_authenticated:
+            raise HTTPException(
+                status_code=503,
+                detail="Angel One API not connected"
+            )
+        
+        interval = Config.TIMEFRAME_MAP.get(request.timeframe, Config.DEFAULT_TIMEFRAME)
+        
+        historical_data = await angel_service.get_multiple_historical_data(
+            symbols=request.stocks,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            interval=interval
+        )
+        
+        if not historical_data:
+            raise HTTPException(status_code=404, detail="No data available")
+        
+        results = await backtest_engine.run_backtest(
+            historical_data=historical_data,
+            strategy=request.strategy,
+            target_percent=request.target_percent,
+            stop_loss_percent=request.stop_loss_percent
+        )
+        
+        # Prepare summary data
+        summary_data = {
+            'strategy': request.strategy.replace('_', ' ').title(),
+            'period': f"{request.start_date} to {request.end_date}",
+            'stocks_analyzed': len(request.stocks),
+            'total_patterns': results['total_patterns'],
+            'target_hit_count': results['target_hit_count'],
+            'stop_loss_count': results['stop_loss_count'],
+            'eod_exit_count': results['eod_exit_count'],
+            'target_hit_rate': results['target_hit_rate'],
+            'stop_loss_rate': results['stop_loss_rate'],
+            'avg_return': results['avg_return'],
+            'total_points_gained': results['total_points_gained']
         }
+        
+        # Generate Excel file
+        excel_file = ExcelExporter.create_excel_report(
+            trades_data=results['trades'],
+            summary_data=summary_data
+        )
+        
+        # Prepare filename
+        filename = f"backtest_{request.strategy}_{request.start_date}_to_{request.end_date}.xlsx"
+        
+        logger.info(f"✅ Excel report generated: {filename}")
+        
+        # Return as downloadable file
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Excel generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Excel generation failed: {str(e)}")
 
-@app.get("/api/backtest/{backtest_id}/status")
-async def get_backtest_status(backtest_id: str):
-    """Get backtest status"""
-    if backtest_id not in active_backtests:
-        raise HTTPException(status_code=404, detail="Backtest not found")
-    return active_backtests[backtest_id]
-
-@app.get("/api/backtest/{backtest_id}/result")
-async def get_backtest_result(backtest_id: str):
-    """Get backtest results"""
-    if backtest_id not in active_backtests:
-        raise HTTPException(status_code=404, detail="Backtest not found")
-    
-    backtest_info = active_backtests[backtest_id]
-    if backtest_info["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Backtest not completed")
-    
-    return backtest_info["result"]
-
-# Static file serving for frontend
+# Mount static files (frontend)
 if os.path.exists("frontend"):
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
-# Production server configuration
+# Run server
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    host = os.environ.get("HOST", "0.0.0.0")
-    
     uvicorn.run(
         "main:app",
-        host=host,
-        port=port,
-        log_level="info"
+        host=Config.HOST,
+        port=Config.PORT,
+        reload=Config.DEBUG
     )
