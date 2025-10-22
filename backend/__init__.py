@@ -1,7 +1,7 @@
 """SageForge Backtesting Backend"""
 __version__ = "1.0.0"
 
-# backend/services/__init__.py
+# backend/service/__init__.py
 from .angel_one_service import AngelOneService
 from .backtest_engine import BacktestEngine
 

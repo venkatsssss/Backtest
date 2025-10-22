@@ -8,13 +8,13 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-from config import Config
-from models.schemas import (
+from backend.config import Config
+from backend.models.schemas import (
     BacktestRequest, BacktestResponse, StockInfo, HealthResponse
 )
-from services.angel_one_service import AngelOneService
-from services.backtest_engine import BacktestEngine
-from utils.excel_export import ExcelExporter
+from backend.service.angel_one_service import AngelOneService
+from backend.service.backtest_engine import BacktestEngine
+from backend.utils.excel_export import ExcelExporter
 
 # Configure logging
 logging.basicConfig(
