@@ -12,9 +12,9 @@ from config import Config
 from models.schemas import BacktestRequest, BacktestResponse, StockInfo, HealthResponse
 
 
-from .service.angel_one_service import AngelOneService
-from .service.backtest_engine import BacktestEngine
-from .utils.excel_export import ExcelExporter
+from service.angel_one_service import AngelOneService
+from service.backtest_engine import BacktestEngine
+from utils.excel_export import ExcelExporter
 
 # Configure logging
 logging.basicConfig(

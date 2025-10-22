@@ -2,8 +2,8 @@
 __version__ = "1.0.0"
 
 # backend/service/__init__.py
-from .angel_one_service import AngelOneService
-from .backtest_engine import BacktestEngine
+from angel_one_service import AngelOneService
+from backtest_engine import BacktestEngine
 
 __all__ = ['AngelOneService', 'BacktestEngine']
 
