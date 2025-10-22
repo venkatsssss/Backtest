@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from config import Config
-from .models.schemas import BacktestRequest, BacktestResponse, StockInfo, HealthResponse
+from backend.models.schemas import BacktestRequest, BacktestResponse, StockInfo, HealthResponse
+
 
 from .service.angel_one_service import AngelOneService
 from .service.backtest_engine import BacktestEngine
