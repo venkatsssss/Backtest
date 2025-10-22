@@ -2,9 +2,8 @@ import pandas as pd
 import logging
 from datetime import datetime, time
 from typing import List, Dict
-from utils.pattern_detector import PatternDetector
-from config import Config
-
+from backend.utils.pattern_detector import PatternDetector
+from backend.config import Config
 logger = logging.getLogger(__name__)
 
 class BacktestEngine:

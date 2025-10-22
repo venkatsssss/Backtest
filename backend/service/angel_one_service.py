@@ -6,8 +6,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from SmartApi import SmartConnect
-from config import Config
-
+from backend.config import Config
 logger = logging.getLogger(__name__)
 
 class AngelOneService:

@@ -1,7 +1,8 @@
 import pandas as pd
 import logging
 from typing import List, Dict, Tuple
-from config import Config
+from backend.config import Config
+
 
 logger = logging.getLogger(__name__)
 
