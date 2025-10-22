@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-from .config import Config
+from config import Config
 from .models.schemas import (
     BacktestRequest, BacktestResponse, StockInfo, HealthResponse
 )
