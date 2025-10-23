@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-
+import sys
+from pathlib import Path
 from config import Config
 from models.schemas import BacktestRequest, BacktestResponse, StockInfo, HealthResponse
 
@@ -42,6 +43,24 @@ app.add_middleware(
 # Initialize services
 angel_service = AngelOneService()
 backtest_engine = BacktestEngine()
+
+
+# Get the project root directory
+if getattr(sys, 'frozen', False):
+    # Running as compiled
+    root_dir = Path(sys.executable).parent
+else:
+    # Running as script - go up one level from backend/
+    root_dir = Path(__file__).parent.parent
+
+frontend_path = root_dir / "frontend"
+
+if frontend_path.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+    logger.info(f"✅ Serving frontend from: {frontend_path}")
+else:
+    logger.warning(f"⚠️ Frontend directory not found at: {frontend_path}")
+```
 
 @app.on_event("startup")
 async def startup_event():
