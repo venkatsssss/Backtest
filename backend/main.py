@@ -2,13 +2,13 @@ import os
 import logging
 from datetime import datetime, timedelta
 from typing import List
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-import sys
-from pathlib import Path
+
 from backend.config import Config
 from backend.models.schemas import BacktestRequest, BacktestResponse, StockInfo, HealthResponse
 from backend.service.angel_one_service import AngelOneService
@@ -41,7 +41,6 @@ app.add_middleware(
 # Initialize services
 angel_service = AngelOneService()
 backtest_engine = BacktestEngine()
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -85,12 +84,7 @@ async def health_check():
 
 @app.get("/api/stocks", response_model=List[StockInfo])
 async def get_stocks(sector: str = "all"):
-    """
-    Get NSE stocks list
-    
-    Query params:
-    - sector: Filter by sector (all, banking, it, fmcg, pharma, auto, oil_gas)
-    """
+    """Get NSE stocks list"""
     try:
         stocks = await angel_service.get_nse_stocks(sector)
         return stocks
@@ -129,32 +123,16 @@ async def get_strategies():
 
 @app.post("/api/backtest")
 async def run_backtest(request: BacktestRequest):
-    """
-    Run backtest analysis
-    
-    Request body:
-    - stocks: List of stock symbols
-    - strategy: 'hammer' or 'inverted_hammer'
-    - target_percent: Target profit percentage (0.1-50)
-    - stop_loss_percent: Stop loss percentage (0.1-20)
-    - start_date: Start date (YYYY-MM-DD)
-    - end_date: End date (YYYY-MM-DD)
-    - timeframe: Candle timeframe (default: 15min)
-    """
+    """Run backtest analysis"""
     try:
         logger.info(f"🔨 Starting {request.strategy} backtest for {len(request.stocks)} stocks")
         
-        # Validate inputs
         if not request.stocks:
             raise HTTPException(status_code=400, detail="No stocks selected")
         
         if not angel_service.is_authenticated:
-            raise HTTPException(
-                status_code=503,
-                detail="Angel One API not connected. Please check credentials."
-            )
+            raise HTTPException(status_code=503, detail="Angel One API not connected")
         
-        # Get historical data for all stocks
         interval = Config.TIMEFRAME_MAP.get(request.timeframe, Config.DEFAULT_TIMEFRAME)
         
         historical_data = await angel_service.get_multiple_historical_data(
@@ -165,14 +143,10 @@ async def run_backtest(request: BacktestRequest):
         )
         
         if not historical_data:
-            raise HTTPException(
-                status_code=404,
-                detail="No historical data available for selected stocks"
-            )
+            raise HTTPException(status_code=404, detail="No historical data available")
         
         logger.info(f"Retrieved data for {len(historical_data)} stocks")
         
-        # Run backtest
         results = await backtest_engine.run_backtest(
             historical_data=historical_data,
             strategy=request.strategy,
@@ -180,7 +154,6 @@ async def run_backtest(request: BacktestRequest):
             stop_loss_percent=request.stop_loss_percent
         )
         
-        # Add metadata
         results['strategy'] = request.strategy.replace('_', ' ').title()
         results['period'] = f"{request.start_date} to {request.end_date}"
         results['stocks_analyzed'] = len(request.stocks)
@@ -198,21 +171,12 @@ async def run_backtest(request: BacktestRequest):
 
 @app.post("/api/backtest/download")
 async def download_backtest_excel(request: BacktestRequest):
-    """
-    Download backtest results as Excel file
-    
-    Same parameters as /api/backtest endpoint
-    Returns Excel file for download
-    """
+    """Download backtest results as Excel file"""
     try:
         logger.info(f"Generating Excel report for {len(request.stocks)} stocks")
         
-        # Run backtest (reuse logic)
         if not angel_service.is_authenticated:
-            raise HTTPException(
-                status_code=503,
-                detail="Angel One API not connected"
-            )
+            raise HTTPException(status_code=503, detail="Angel One API not connected")
         
         interval = Config.TIMEFRAME_MAP.get(request.timeframe, Config.DEFAULT_TIMEFRAME)
         
@@ -233,7 +197,6 @@ async def download_backtest_excel(request: BacktestRequest):
             stop_loss_percent=request.stop_loss_percent
         )
         
-        # Prepare summary data
         summary_data = {
             'strategy': request.strategy.replace('_', ' ').title(),
             'period': f"{request.start_date} to {request.end_date}",
@@ -248,18 +211,15 @@ async def download_backtest_excel(request: BacktestRequest):
             'total_points_gained': results['total_points_gained']
         }
         
-        # Generate Excel file
         excel_file = ExcelExporter.create_excel_report(
             trades_data=results['trades'],
             summary_data=summary_data
         )
         
-        # Prepare filename
         filename = f"backtest_{request.strategy}_{request.start_date}_to_{request.end_date}.xlsx"
         
         logger.info(f"✅ Excel report generated: {filename}")
         
-        # Return as downloadable file
         return StreamingResponse(
             excel_file,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -272,11 +232,18 @@ async def download_backtest_excel(request: BacktestRequest):
         logger.error(f"Excel generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Excel generation failed: {str(e)}")
 
-# Mount static files (frontend)
-if os.path.exists("frontend"):
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+# Mount static files (frontend) - MUST BE LAST
+root_dir = Path(__file__).parent.parent
+frontend_path = root_dir / "frontend"
 
-# Run server
+logger.info(f"🔍 Looking for frontend at: {frontend_path}")
+
+if frontend_path.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+    logger.info(f"✅ Serving frontend from: {frontend_path}")
+else:
+    logger.warning(f"⚠️ Frontend directory not found at: {frontend_path}")
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
@@ -284,6 +251,3 @@ if __name__ == "__main__":
         port=Config.PORT,
         reload=Config.DEBUG
     )
-# Mount static files (frontend)
-if os.path.exists("frontend"):
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")    
