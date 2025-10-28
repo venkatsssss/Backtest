@@ -5,7 +5,7 @@ from typing import List
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -63,15 +63,6 @@ async def shutdown_event():
         angel_service.logout()
     except Exception as e:
         logger.error(f"Shutdown error: {e}")
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "SageForge Backtesting API",
-        "version": "1.0.0",
-        "status": "running"
-    }
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
@@ -232,17 +223,44 @@ async def download_backtest_excel(request: BacktestRequest):
         logger.error(f"Excel generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Excel generation failed: {str(e)}")
 
-# Mount static files (frontend) - MUST BE LAST
+# Mount static files for frontend
 root_dir = Path(__file__).parent.parent
 frontend_path = root_dir / "frontend"
 
 logger.info(f"🔍 Looking for frontend at: {frontend_path}")
 
 if frontend_path.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
-    logger.info(f"✅ Serving frontend from: {frontend_path}")
+    # Mount CSS and JS files
+    app.mount("/css", StaticFiles(directory=str(frontend_path / "css")), name="css")
+    app.mount("/js", StaticFiles(directory=str(frontend_path / "js")), name="js")
+    logger.info(f"✅ Mounted static assets from: {frontend_path}")
+    
+    # Serve index.html at root
+    @app.get("/")
+    async def serve_frontend():
+        """Serve the frontend HTML"""
+        index_path = frontend_path / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        else:
+            return {
+                "message": "SageForge Backtesting API",
+                "version": "1.0.0",
+                "status": "running",
+                "error": "Frontend not found"
+            }
 else:
     logger.warning(f"⚠️ Frontend directory not found at: {frontend_path}")
+    
+    @app.get("/")
+    async def root():
+        """Root endpoint when frontend is not available"""
+        return {
+            "message": "SageForge Backtesting API",
+            "version": "1.0.0",
+            "status": "running",
+            "note": "Frontend not deployed"
+        }
 
 if __name__ == "__main__":
     uvicorn.run(
