@@ -4,6 +4,7 @@ from datetime import datetime, time
 from typing import List, Dict
 from backend.utils.pattern_detector import PatternDetector
 from backend.config import Config
+
 logger = logging.getLogger(__name__)
 
 class BacktestEngine:
@@ -126,20 +127,24 @@ class BacktestEngine:
             Dict with trade details
         """
         try:
-            entry_time = pattern['timestamp']
+            # Pattern formed at this time
+            pattern_time = pattern['timestamp']
+            
+            # Entry at next candle (already in pattern dict)
+            entry_time = pattern['entry_timestamp']
             entry_price = pattern['entry_price']
             
             # Calculate target and stop loss prices
             target_price = entry_price * (1 + target_percent / 100)
             stop_loss_price = entry_price * (1 - stop_loss_percent / 100)
             
-            # Get future candles (same day only for intraday)
+            # Get future candles AFTER entry (same day only)
             future_candles = df[df.index > entry_time].copy()
             
             if future_candles.empty:
                 return None
             
-            # Filter same day candles only
+            # Filter same day candles only (intraday)
             entry_date = entry_time.date()
             same_day_candles = future_candles[
                 future_candles.index.date == entry_date
@@ -205,8 +210,8 @@ class BacktestEngine:
             
             return {
                 'stock': symbol,
-                'pattern_date': entry_time.strftime('%Y-%m-%d'),
-                'pattern_time': entry_time.strftime('%H:%M'),
+                'pattern_date': pattern_time.strftime('%Y-%m-%d'),  # Hammer formed date
+                'pattern_time': pattern_time.strftime('%H:%M'),      # Hammer formed time
                 'entry_price': round(entry_price, 2),
                 'target_price': round(target_price, 2),
                 'stop_loss_price': round(stop_loss_price, 2),
@@ -217,7 +222,12 @@ class BacktestEngine:
                 'percentage_return': round(percentage_return, 2),
                 'minutes_held': int(minutes_held),
                 'candles_held': candles_held,
-                'outcome': outcome
+                'outcome': outcome,
+                # Additional pattern info
+                'lower_shadow': pattern.get('lower_shadow', 0),
+                'upper_shadow': pattern.get('upper_shadow', 0),
+                'body_size': pattern.get('body_size', 0),
+                'confidence': pattern.get('confidence', 0)
             }
             
         except Exception as e:

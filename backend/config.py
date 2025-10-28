@@ -25,15 +25,15 @@ class Config:
     MARKET_CLOSE_TIME = "15:30"
     MARKET_TIMEZONE = "Asia/Kolkata"
     
-    # Hammer Pattern Detection Criteria
-    HAMMER_MIN_LOWER_SHADOW_RATIO = 2.0  # Lower shadow >= 2x body
-    HAMMER_MAX_UPPER_SHADOW_RATIO = 0.5  # Upper shadow <= 0.5x body
-    HAMMER_MIN_BODY_RATIO = 0.1  # Body >= 10% of total range
+    # RELAXED Hammer Pattern Detection Criteria
+    HAMMER_MIN_LOWER_SHADOW_RATIO = 1.5  # Lower shadow >= 1.5x body (was 2.0)
+    HAMMER_MAX_UPPER_SHADOW_RATIO = 1.0  # Upper shadow <= 1x body (was 0.5)
+    HAMMER_MIN_BODY_RATIO = 0.05  # Body >= 5% of total range (was 0.1)
     
-    # Inverted Hammer Pattern Detection Criteria
-    INV_HAMMER_MIN_UPPER_SHADOW_RATIO = 2.0  # Upper shadow >= 2x body
-    INV_HAMMER_MAX_LOWER_SHADOW_RATIO = 0.5  # Lower shadow <= 0.5x body
-    INV_HAMMER_MIN_BODY_RATIO = 0.1  # Body >= 10% of total range
+    # RELAXED Inverted Hammer Pattern Detection Criteria
+    INV_HAMMER_MIN_UPPER_SHADOW_RATIO = 1.5  # Upper shadow >= 1.5x body (was 2.0)
+    INV_HAMMER_MAX_LOWER_SHADOW_RATIO = 1.0  # Lower shadow <= 1x body (was 0.5)
+    INV_HAMMER_MIN_BODY_RATIO = 0.05  # Body >= 5% of total range (was 0.1)
     
     # Trading Constraints (Intraday)
     MAX_HOLDING_MINUTES = 390  # Full trading day (6.5 hours)

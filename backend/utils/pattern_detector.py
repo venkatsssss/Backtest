@@ -12,17 +12,16 @@ class PatternDetector:
     @staticmethod
     def detect_hammer(df: pd.DataFrame) -> List[Dict]:
         """
-        Detect Hammer pattern:
-        - Long lower shadow (at least 2x body)
-        - Small or no upper shadow (max 0.5x body)
-        - Small body in upper part of range
-        - Body size should be reasonable (not too small)
-        - Entry on NEXT candle's open
+        Detect Hammer pattern - RELAXED CRITERIA:
+        - Lower shadow significantly longer than upper shadow
+        - Lower shadow at least 1.5x body size
+        - Small to medium body
+        - Returns hammer candle timestamp (not next candle)
         """
         patterns = []
         
-        # Need at least 2 candles (current + next for entry)
-        for i in range(len(df) - 1):  # -1 to ensure we have a next candle
+        # Need at least 1 candle after for entry price
+        for i in range(len(df) - 1):
             try:
                 candle = df.iloc[i]
                 timestamp = df.index[i]
@@ -36,66 +35,57 @@ class PatternDetector:
                 body = abs(close_price - open_price)
                 total_range = high_price - low_price
                 
-                # Skip doji or very small candles
-                if total_range == 0 or total_range < 0.001:
-                    continue
-                
-                # Body must be at least 10% of total range (not a doji)
-                if body / total_range < 0.1:
+                # Skip if no range
+                if total_range == 0 or total_range < 0.01:
                     continue
                 
                 lower_shadow = min(open_price, close_price) - low_price
                 upper_shadow = high_price - max(open_price, close_price)
                 
-                # Skip if body is too small (< 0.5 points for most stocks)
-                if body < 0.5:
+                # RELAXED Hammer criteria:
+                # 1. Lower shadow must be longer than upper shadow
+                # 2. Lower shadow >= 1.5x body (reduced from 2x)
+                # 3. Upper shadow <= body (more lenient)
+                # 4. Body should be at least 5% of range (not too small)
+                # 5. Lower shadow should be meaningful (>= 1 point)
+                
+                if body == 0:  # Doji - skip
                     continue
                 
-                # Hammer criteria - STRICT
-                # Lower shadow must be significantly longer than body
-                lower_shadow_ratio = lower_shadow / body if body > 0 else 0
-                upper_shadow_ratio = upper_shadow / body if body > 0 else 0
+                lower_shadow_ratio = lower_shadow / body
+                upper_shadow_ratio = upper_shadow / body
                 body_ratio = body / total_range
                 
-                # Check if it's a valid hammer:
-                # 1. Lower shadow >= 2x body (main criterion)
-                # 2. Upper shadow <= 0.5x body (small or no upper wick)
-                # 3. Body is in upper part (at least 10% of range)
-                # 4. Lower shadow > upper shadow (dominant lower wick)
-                # 5. Lower shadow is significant (> 2 points for most stocks)
+                # More lenient hammer detection
                 is_hammer = (
-                    lower_shadow_ratio >= Config.HAMMER_MIN_LOWER_SHADOW_RATIO and
-                    upper_shadow_ratio <= Config.HAMMER_MAX_UPPER_SHADOW_RATIO and
-                    body_ratio >= Config.HAMMER_MIN_BODY_RATIO and
                     lower_shadow > upper_shadow and  # Lower shadow dominant
-                    lower_shadow >= 2.0  # Absolute minimum lower shadow length
+                    lower_shadow_ratio >= 1.5 and     # Lower shadow >= 1.5x body (relaxed)
+                    upper_shadow_ratio <= 1.0 and     # Upper shadow <= body (more lenient)
+                    body_ratio >= 0.05 and            # Body >= 5% of range (relaxed)
+                    lower_shadow >= 1.0               # Absolute minimum shadow (1 point)
                 )
                 
                 if is_hammer:
-                    # Get NEXT candle for entry
+                    # Get NEXT candle for entry price
                     next_candle = df.iloc[i + 1]
-                    next_timestamp = df.index[i + 1]
                     entry_price = float(next_candle['open'])
                     
-                    # Additional validation: Entry should be reasonable
-                    # Entry shouldn't be too far from hammer's close
-                    price_gap = abs(entry_price - close_price) / close_price
-                    if price_gap > 0.05:  # Skip if gap > 5%
-                        continue
-                    
+                    # Store pattern with HAMMER timestamp (not entry timestamp)
                     patterns.append({
-                        'timestamp': next_timestamp,  # Entry timestamp (next candle)
-                        'pattern_timestamp': timestamp,  # When hammer formed
+                        'timestamp': timestamp,  # HAMMER candle timestamp
+                        'entry_timestamp': df.index[i + 1],  # Next candle for entry
                         'open': open_price,
                         'high': high_price,
                         'low': low_price,
                         'close': close_price,
-                        'entry_price': entry_price,  # NEXT candle's open
+                        'entry_price': entry_price,  # Entry at next candle's open
                         'pattern_type': 'hammer',
                         'lower_shadow': round(lower_shadow, 2),
                         'upper_shadow': round(upper_shadow, 2),
                         'body_size': round(body, 2),
+                        'total_range': round(total_range, 2),
                         'lower_shadow_ratio': round(lower_shadow_ratio, 2),
+                        'upper_shadow_ratio': round(upper_shadow_ratio, 2),
                         'confidence': PatternDetector._calculate_confidence(
                             lower_shadow_ratio, upper_shadow_ratio, body_ratio, 'hammer'
                         )
@@ -111,15 +101,14 @@ class PatternDetector:
     @staticmethod
     def detect_inverted_hammer(df: pd.DataFrame) -> List[Dict]:
         """
-        Detect Inverted Hammer pattern:
-        - Long upper shadow (at least 2x body)
-        - Small or no lower shadow (max 0.5x body)
-        - Small body in lower part of range
-        - Entry on NEXT candle's open
+        Detect Inverted Hammer pattern - RELAXED CRITERIA:
+        - Upper shadow significantly longer than lower shadow
+        - Upper shadow at least 1.5x body size
+        - Small to medium body
         """
         patterns = []
         
-        for i in range(len(df) - 1):  # -1 to ensure we have a next candle
+        for i in range(len(df) - 1):
             try:
                 candle = df.iloc[i]
                 timestamp = df.index[i]
@@ -133,58 +122,48 @@ class PatternDetector:
                 body = abs(close_price - open_price)
                 total_range = high_price - low_price
                 
-                # Skip doji or very small candles
-                if total_range == 0 or total_range < 0.001:
-                    continue
-                
-                # Body must be at least 10% of total range
-                if body / total_range < 0.1:
+                if total_range == 0 or total_range < 0.01:
                     continue
                 
                 lower_shadow = min(open_price, close_price) - low_price
                 upper_shadow = high_price - max(open_price, close_price)
                 
-                # Skip if body is too small
-                if body < 0.5:
+                if body == 0:  # Doji
                     continue
                 
-                # Inverted Hammer criteria - STRICT
-                upper_shadow_ratio = upper_shadow / body if body > 0 else 0
-                lower_shadow_ratio = lower_shadow / body if body > 0 else 0
+                upper_shadow_ratio = upper_shadow / body
+                lower_shadow_ratio = lower_shadow / body
                 body_ratio = body / total_range
                 
+                # Relaxed inverted hammer criteria
                 is_inverted_hammer = (
-                    upper_shadow_ratio >= Config.INV_HAMMER_MIN_UPPER_SHADOW_RATIO and
-                    lower_shadow_ratio <= Config.INV_HAMMER_MAX_LOWER_SHADOW_RATIO and
-                    body_ratio >= Config.INV_HAMMER_MIN_BODY_RATIO and
-                    upper_shadow > lower_shadow and  # Upper shadow dominant
-                    upper_shadow >= 2.0  # Absolute minimum upper shadow length
+                    upper_shadow > lower_shadow and   # Upper shadow dominant
+                    upper_shadow_ratio >= 1.5 and     # Upper shadow >= 1.5x body
+                    lower_shadow_ratio <= 1.0 and     # Lower shadow <= body
+                    body_ratio >= 0.05 and            # Body >= 5% of range
+                    upper_shadow >= 1.0               # Absolute minimum shadow
                 )
                 
                 if is_inverted_hammer:
                     # Get NEXT candle for entry
                     next_candle = df.iloc[i + 1]
-                    next_timestamp = df.index[i + 1]
                     entry_price = float(next_candle['open'])
                     
-                    # Additional validation
-                    price_gap = abs(entry_price - close_price) / close_price
-                    if price_gap > 0.05:  # Skip if gap > 5%
-                        continue
-                    
                     patterns.append({
-                        'timestamp': next_timestamp,  # Entry timestamp
-                        'pattern_timestamp': timestamp,  # When pattern formed
+                        'timestamp': timestamp,  # INVERTED HAMMER timestamp
+                        'entry_timestamp': df.index[i + 1],
                         'open': open_price,
                         'high': high_price,
                         'low': low_price,
                         'close': close_price,
-                        'entry_price': entry_price,  # NEXT candle's open
+                        'entry_price': entry_price,
                         'pattern_type': 'inverted_hammer',
                         'upper_shadow': round(upper_shadow, 2),
                         'lower_shadow': round(lower_shadow, 2),
                         'body_size': round(body, 2),
+                        'total_range': round(total_range, 2),
                         'upper_shadow_ratio': round(upper_shadow_ratio, 2),
+                        'lower_shadow_ratio': round(lower_shadow_ratio, 2),
                         'confidence': PatternDetector._calculate_confidence(
                             upper_shadow_ratio, lower_shadow_ratio, body_ratio, 'inverted_hammer'
                         )
@@ -201,61 +180,30 @@ class PatternDetector:
     def _calculate_confidence(shadow_ratio: float, opposite_shadow: float, 
                             body_ratio: float, pattern_type: str) -> float:
         """Calculate pattern confidence score (0-100)"""
-        confidence = 50.0
+        confidence = 40.0  # Base confidence
         
-        # Main shadow dominance
+        # Main shadow dominance (more weight for stronger shadows)
         if shadow_ratio >= 3.0:
-            confidence += 30
-        elif shadow_ratio >= 2.5:
-            confidence += 20
+            confidence += 35
+        elif shadow_ratio >= 2.0:
+            confidence += 25
+        elif shadow_ratio >= 1.5:
+            confidence += 15
         else:
-            confidence += 10
+            confidence += 5
         
         # Opposite shadow minimality
-        if opposite_shadow <= 0.3:
+        if opposite_shadow <= 0.5:
             confidence += 15
-        elif opposite_shadow <= 0.5:
+        elif opposite_shadow <= 1.0:
             confidence += 10
         else:
             confidence += 5
         
         # Body significance
         if body_ratio >= 0.15:
+            confidence += 10
+        elif body_ratio >= 0.10:
             confidence += 5
         
         return min(confidence, 100.0)
-    
-    @staticmethod
-    def is_downtrend(df: pd.DataFrame, index: int, lookback: int = 5) -> bool:
-        """
-        Check if stock is in downtrend (for hammer context validation)
-        Optional: Use this for additional filtering
-        """
-        if index < lookback:
-            return True  # Not enough data, allow pattern
-        
-        try:
-            recent_closes = [float(df.iloc[i]['close']) for i in range(index - lookback, index)]
-            # Simple check: if more lower closes than higher
-            declines = sum(1 for i in range(1, len(recent_closes)) 
-                          if recent_closes[i] < recent_closes[i-1])
-            return declines > lookback / 2
-        except:
-            return True  # Default to allowing pattern
-    
-    @staticmethod
-    def is_uptrend(df: pd.DataFrame, index: int, lookback: int = 5) -> bool:
-        """
-        Check if stock is in uptrend (for inverted hammer context validation)
-        Optional: Use this for additional filtering
-        """
-        if index < lookback:
-            return True
-        
-        try:
-            recent_closes = [float(df.iloc[i]['close']) for i in range(index - lookback, index)]
-            advances = sum(1 for i in range(1, len(recent_closes)) 
-                          if recent_closes[i] > recent_closes[i-1])
-            return advances > lookback / 2
-        except:
-            return True
