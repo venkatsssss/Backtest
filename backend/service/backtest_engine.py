@@ -122,9 +122,10 @@ class BacktestEngine:
     ) -> Dict:
         """
         Simulate a single trade based on pattern
+        NOW TRACKS: Maximum profit reached during trade
         
         Returns:
-            Dict with trade details
+            Dict with trade details including max_profit_reached
         """
         try:
             # Pattern formed at this time
@@ -153,7 +154,7 @@ class BacktestEngine:
             if same_day_candles.empty:
                 return None
             
-            # Simulate trade execution
+            # Initialize tracking variables
             exit_price = entry_price
             exit_time = entry_time
             exit_reason = 'eod_exit'
@@ -161,10 +162,26 @@ class BacktestEngine:
             minutes_held = 0
             candles_held = 0
             
+            # NEW: Track maximum profit reached
+            max_profit_points = 0.0  # Maximum profit in points
+            max_profit_percent = 0.0  # Maximum profit in percentage
+            max_loss_points = 0.0  # Maximum loss (for additional insight)
+            
             for idx, (timestamp, candle) in enumerate(same_day_candles.iterrows(), 1):
                 high_price = float(candle['high'])
                 low_price = float(candle['low'])
                 close_price = float(candle['close'])
+                
+                # Track maximum profit reached (from HIGH of each candle)
+                profit_at_high = high_price - entry_price
+                if profit_at_high > max_profit_points:
+                    max_profit_points = profit_at_high
+                    max_profit_percent = (profit_at_high / entry_price) * 100
+                
+                # Track maximum loss reached (from LOW of each candle)
+                loss_at_low = entry_price - low_price
+                if loss_at_low > max_loss_points:
+                    max_loss_points = loss_at_low
                 
                 # Check if target hit (priority)
                 if high_price >= target_price:
@@ -174,6 +191,10 @@ class BacktestEngine:
                     outcome = 'target_hit'
                     minutes_held = (timestamp - entry_time).total_seconds() / 60
                     candles_held = idx
+                    # Max profit will be at least the target
+                    if max_profit_points < (target_price - entry_price):
+                        max_profit_points = target_price - entry_price
+                        max_profit_percent = target_percent
                     break
                 
                 # Check if stop loss hit
@@ -204,14 +225,19 @@ class BacktestEngine:
                 minutes_held = (exit_time - entry_time).total_seconds() / 60
                 candles_held = len(same_day_candles)
             
-            # Calculate returns
+            # Calculate final returns
             points_gained = exit_price - entry_price
             percentage_return = (points_gained / entry_price) * 100
             
+            # If max profit is still 0 (never went into profit), keep it as 0
+            if max_profit_points < 0:
+                max_profit_points = 0.0
+                max_profit_percent = 0.0
+            
             return {
                 'stock': symbol,
-                'pattern_date': pattern_time.strftime('%Y-%m-%d'),  # Hammer formed date
-                'pattern_time': pattern_time.strftime('%H:%M'),      # Hammer formed time
+                'pattern_date': pattern_time.strftime('%Y-%m-%d'),
+                'pattern_time': pattern_time.strftime('%H:%M'),
                 'entry_price': round(entry_price, 2),
                 'target_price': round(target_price, 2),
                 'stop_loss_price': round(stop_loss_price, 2),
@@ -223,6 +249,12 @@ class BacktestEngine:
                 'minutes_held': int(minutes_held),
                 'candles_held': candles_held,
                 'outcome': outcome,
+                
+                # NEW FIELDS
+                'max_profit_points': round(max_profit_points, 2),
+                'max_profit_percent': round(max_profit_percent, 2),
+                'max_loss_points': round(max_loss_points, 2),
+                
                 # Additional pattern info
                 'lower_shadow': pattern.get('lower_shadow', 0),
                 'upper_shadow': pattern.get('upper_shadow', 0),

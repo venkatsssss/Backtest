@@ -159,7 +159,7 @@ class UIHandler {
         if (!trades || trades.length === 0) {
             this.elements.resultsTableBody.innerHTML = `
                 <tr>
-                    <td colspan="14" style="text-align: center; padding: 40px;">
+                    <td colspan="16" style="text-align: center; padding: 40px;">
                         No trades found for the selected criteria
                     </td>
                 </tr>
@@ -170,6 +170,7 @@ class UIHandler {
         const tradesHTML = trades.map(trade => {
             const outcomeClass = this.getOutcomeClass(trade.outcome);
             const returnColor = trade.percentage_return >= 0 ? '#51cf66' : '#ff6b6b';
+            const maxProfitColor = trade.max_profit_points > 0 ? '#51cf66' : '#888';
 
             return `
                 <tr>
@@ -182,6 +183,12 @@ class UIHandler {
                     <td>₹${trade.exit_price}</td>
                     <td>${trade.exit_time}</td>
                     <td>${trade.exit_reason}</td>
+                    <td style="color: ${maxProfitColor}; font-weight: 600;">
+                        ₹${trade.max_profit_points}
+                    </td>
+                    <td style="color: ${maxProfitColor}; font-weight: 600;">
+                        ${trade.max_profit_percent}%
+                    </td>
                     <td style="color: ${returnColor}">₹${trade.points_gained}</td>
                     <td style="color: ${returnColor}; font-weight: 600;">${trade.percentage_return}%</td>
                     <td>${trade.minutes_held} min</td>

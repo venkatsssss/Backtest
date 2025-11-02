@@ -86,15 +86,15 @@ class ExcelExporter:
     
     @staticmethod
     def _create_trades_sheet(wb: Workbook, trades: list):
-        """Create detailed trades sheet"""
+        """Create detailed trades sheet with max profit columns"""
         ws = wb.create_sheet("Detailed Trades", 1)
         
-        # Headers
+        # Headers - UPDATED with Max Profit columns
         headers = [
             'Stock Symbol', 'Pattern Date', 'Pattern Time', 'Entry Price',
             'Target Price', 'Stop Loss Price', 'Exit Price', 'Exit Time',
-            'Exit Reason', 'Points Gained', 'Percentage Return', 
-            'Minutes Held', 'Candles Held', 'Outcome'
+            'Exit Reason', 'Max Profit ₹', 'Max Profit %', 'Points Gained', 
+            'Percentage Return', 'Minutes Held', 'Candles Held', 'Outcome'
         ]
         
         # Style for headers
@@ -126,14 +126,25 @@ class ExcelExporter:
             ws.cell(row=row_idx, column=7, value=trade.get('exit_price', 0))
             ws.cell(row=row_idx, column=8, value=trade.get('exit_time', ''))
             ws.cell(row=row_idx, column=9, value=trade.get('exit_reason', ''))
-            ws.cell(row=row_idx, column=10, value=trade.get('points_gained', 0))
-            ws.cell(row=row_idx, column=11, value=trade.get('percentage_return', 0))
-            ws.cell(row=row_idx, column=12, value=trade.get('minutes_held', 0))
-            ws.cell(row=row_idx, column=13, value=trade.get('candles_held', 0))
-            ws.cell(row=row_idx, column=14, value=trade.get('outcome', ''))
+            
+            # NEW: Max Profit columns
+            ws.cell(row=row_idx, column=10, value=trade.get('max_profit_points', 0))
+            ws.cell(row=row_idx, column=11, value=trade.get('max_profit_percent', 0))
+            
+            ws.cell(row=row_idx, column=12, value=trade.get('points_gained', 0))
+            ws.cell(row=row_idx, column=13, value=trade.get('percentage_return', 0))
+            ws.cell(row=row_idx, column=14, value=trade.get('minutes_held', 0))
+            ws.cell(row=row_idx, column=15, value=trade.get('candles_held', 0))
+            ws.cell(row=row_idx, column=16, value=trade.get('outcome', ''))
+            
+            # Color code max profit (green if positive)
+            max_profit_cell = ws.cell(row=row_idx, column=10)
+            if trade.get('max_profit_points', 0) > 0:
+                max_profit_cell.fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+                max_profit_cell.font = Font(color="2E7D32", bold=True)
             
             # Color code outcomes
-            outcome_cell = ws.cell(row=row_idx, column=14)
+            outcome_cell = ws.cell(row=row_idx, column=16)
             outcome = trade.get('outcome', '')
             if outcome == 'target_hit':
                 outcome_cell.fill = PatternFill(start_color="51CF66", end_color="51CF66", fill_type="solid")
