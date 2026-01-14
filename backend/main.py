@@ -14,6 +14,7 @@ from backend.models.schemas import BacktestRequest, BacktestResponse, StockInfo,
 from backend.service.angel_one_service import AngelOneService
 from backend.service.backtest_engine import BacktestEngine
 from backend.utils.excel_export import ExcelExporter
+from backend.utils.pdf_report_generator import PDFReportGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -222,6 +223,73 @@ async def download_backtest_excel(request: BacktestRequest):
     except Exception as e:
         logger.error(f"Excel generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Excel generation failed: {str(e)}")
+
+@app.post("/api/backtest/download-pdf")
+async def download_backtest_pdf(request: BacktestRequest):
+    """Download backtest results as PDF report with charts"""
+    try:
+        logger.info(f"Generating PDF report for {len(request.stocks)} stocks")
+        
+        if not angel_service.is_authenticated:
+            raise HTTPException(status_code=503, detail="Angel One API not connected")
+        
+        interval = Config.TIMEFRAME_MAP.get(request.timeframe, Config.DEFAULT_TIMEFRAME)
+        
+        # Get historical data
+        historical_data = await angel_service.get_multiple_historical_data(
+            symbols=request.stocks,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            interval=interval
+        )
+        
+        if not historical_data:
+            raise HTTPException(status_code=404, detail="No data available")
+        
+        # Run backtest
+        results = await backtest_engine.run_backtest(
+            historical_data=historical_data,
+            strategy=request.strategy,
+            target_percent=request.target_percent,
+            stop_loss_percent=request.stop_loss_percent
+        )
+        
+        # Prepare summary data
+        summary_data = {
+            'strategy': request.strategy.replace('_', ' ').title(),
+            'period': f"{request.start_date} to {request.end_date}",
+            'stocks_analyzed': len(request.stocks),
+            'total_patterns': results['total_patterns'],
+            'target_hit_count': results['target_hit_count'],
+            'stop_loss_count': results['stop_loss_count'],
+            'eod_exit_count': results['eod_exit_count'],
+            'target_hit_rate': results['target_hit_rate'],
+            'stop_loss_rate': results['stop_loss_rate'],
+            'avg_return': results['avg_return'],
+            'total_points_gained': results['total_points_gained']
+        }
+        
+        # Generate PDF report
+        pdf_file = PDFReportGenerator.create_pdf_report(
+            results=results,
+            summary_data=summary_data
+        )
+        
+        filename = f"sageforge_report_{request.strategy}_{request.start_date}_to_{request.end_date}.pdf"
+        
+        logger.info(f"✅ PDF report generated: {filename}")
+        
+        return StreamingResponse(
+            pdf_file,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 # Mount static files for frontend
 root_dir = Path(__file__).parent.parent
