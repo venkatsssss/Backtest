@@ -73,6 +73,37 @@ class ApiService {
         }
     }
 
+    async downloadPDF(params) {
+        try {
+            const response = await fetch(`${this.baseURL}/backtest/download-pdf`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(params)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate PDF report');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sageforge_report_${params.strategy}_${params.start_date}_to_${params.end_date}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            return true;
+        } catch (error) {
+            console.error('PDF download error:', error);
+            throw error;
+        }
+    }
+
     async downloadExcel(params) {
         try {
             const response = await fetch(`${this.baseURL}/backtest/download`, {
