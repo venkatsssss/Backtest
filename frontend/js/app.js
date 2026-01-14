@@ -144,6 +144,10 @@ class SageForgeApp {
         });
 
         // Download buttons
+        document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+            this.downloadPDF();
+        });
+
         document.getElementById('downloadExcelBtn').addEventListener('click', () => {
             this.downloadExcel();
         });
@@ -303,6 +307,38 @@ class SageForgeApp {
         } catch (error) {
             console.error('❌ Backtest failed:', error);
             this.ui.showError(error.message || 'Backtest failed. Please try again.');
+        }
+    }
+
+    async downloadPDF() {
+        try {
+            if (!this.state.lastBacktestParams) {
+                alert('Please run a backtest first');
+                return;
+            }
+
+            console.log('📊 Downloading PDF report...');
+            
+            // Show loading message
+            const btn = document.getElementById('downloadPdfBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ Generating PDF...';
+            btn.disabled = true;
+            
+            await this.api.downloadPDF(this.state.lastBacktestParams);
+            
+            console.log('✅ PDF downloaded successfully');
+            
+            btn.textContent = originalText;
+            btn.disabled = false;
+            
+        } catch (error) {
+            console.error('❌ PDF download failed:', error);
+            alert('Failed to download PDF report: ' + error.message);
+            
+            const btn = document.getElementById('downloadPdfBtn');
+            btn.textContent = '📊 Download PDF Report (with Charts)';
+            btn.disabled = false;
         }
     }
 
