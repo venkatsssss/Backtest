@@ -135,8 +135,6 @@ class PDFReportGenerator:
             # Add each chart to PDF
             chart_titles = {
                 'outcome_pie': 'Trade Outcome Distribution',
-                'cumulative_profit': 'Cumulative Profit Over Time',
-                'stock_performance': 'Stock-wise Performance',
                 'max_vs_final': 'Maximum vs Final Profit Analysis',
                 'win_loss_dist': 'Profit/Loss Distribution',
                 'time_analysis': 'Pattern Frequency by Time of Day'
