@@ -6,11 +6,11 @@
 }
 
 :root {
-    --primary: #ff6b6b;
+    --primary: #ad0202;
     --success: #51cf66;
     --warning: #ffd43b;
     --danger: #ff6b6b;
-    --info: #74b9ff;
+    --info: #000000;
     --dark: #1a1a2e;
     --light: #f8f9fa;
     --border: rgba(255, 255, 255, 0.1);
@@ -19,20 +19,17 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: black;
     min-height: 100vh;
     color: #fff;
-    padding: 20px;
+    padding: 0px 20px 20px 20px ;
 }
 
 /* Header */
 .header {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 20px 30px;
-    margin-bottom: 30px;
-    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.05);
+    padding: 12px 16px;
+    border-bottom: 1px solid #e8e8f1;
 }
 
 .header-content {
@@ -41,15 +38,21 @@ body {
     align-items: center;
 }
 
+.logo{
+    display: flex;
+    height: 45px;
+    width: 45px;
+}
 .logo h1 {
     font-size: 2rem;
     color: var(--primary);
     margin-bottom: 5px;
 }
 
-.tagline {
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
+.title{
+    font-size: 30px;
+    font-weight: bold;
+    font-family: Tahoma;
 }
 
 .status {
@@ -86,6 +89,7 @@ body {
 .container {
     max-width: 1400px;
     margin: 0 auto;
+    padding: 30px;
 }
 
 /* Config Section */
