@@ -287,14 +287,6 @@ class ChartGenerator:
             charts['outcome_pie'] = ChartGenerator.create_outcome_pie_chart(results)
             logger.info("✓ Outcome pie chart generated")
             
-            # Chart 2: Cumulative Profit
-            charts['cumulative_profit'] = ChartGenerator.create_cumulative_profit_chart(results['trades'])
-            logger.info("✓ Cumulative profit chart generated")
-            
-            # Chart 3: Stock Performance
-            charts['stock_performance'] = ChartGenerator.create_stock_performance_chart(results['trades'])
-            logger.info("✓ Stock performance chart generated")
-            
             # Chart 4: Max vs Final Profit
             charts['max_vs_final'] = ChartGenerator.create_max_vs_final_profit_chart(results['trades'])
             logger.info("✓ Max vs final profit chart generated")
