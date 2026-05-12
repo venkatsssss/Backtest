@@ -25,45 +25,30 @@ class AngelOneService:
         self.instruments_cache = {}
         
     async def authenticate(self) -> bool:
-        """Authenticate with Angel One API"""
         try:
             if not Config.validate_credentials():
-                logger.warning("Missing Angel One credentials")
                 return False
-            
-            # Initialize SmartConnect
+
             self.smart_api = SmartConnect(api_key=self.api_key)
-            
-            # Generate TOTP
             totp = pyotp.TOTP(self.totp_secret).now()
-            
-            # Generate session
-            data = self.smart_api.generateSession(
-                self.client_id,
-                self.password,
-                totp
-            )
-            
+            data = self.smart_api.generateSession(self.client_id, self.password, totp)
+
             if data['status'] == False:
                 logger.error(f"Authentication failed: {data}")
                 return False
-            
-            self.auth_token = data['data']['jwtToken']
-            self.refresh_token = data['data']['refreshToken']   # ADD
+
+        # generateSession already sets access token internally
+        # just store what we need
+            self.auth_token = data['data']['jwtToken']  # has "Bearer " prefix
             self.feed_token = self.smart_api.getfeedToken()
-            self.smart_api.generateToken(self.refresh_token)    # ADD - this is the missing step
             self.is_authenticated = True
             logger.info("✅ Angel One authentication successful")
-            
-            # Load instruments
             await self.load_instruments()
-            
             return True
-            
         except Exception as e:
             logger.error(f"Angel One authentication error: {e}")
             return False
-    
+        
     async def load_instruments(self) -> bool:
         """Load NSE instruments master data"""
         try:
@@ -207,12 +192,13 @@ class AngelOneService:
                 headers=headers,
                 timeout=30
 )
-            response = api_response.json()
-            logger.info(f"Direct API response for {symbol}: {response}")
+            response = self.smart_api.getCandleData(historic_param)
+            logger.info(f"Response for {symbol}: {response}")
 
-            if not response.get('status') and not response.get('success'):
-                logger.error(f"Failed to get data for {symbol}: {response}")
+            if not response or response.get('status') == False:
+                logger.error(f"Failed: {response}")
                 return pd.DataFrame()
+
 
 # LOG EVERYTHING so we can debug
             logger.info(f"Request for {symbol}: from={from_date_str} to={to_date_str} interval={interval}")
