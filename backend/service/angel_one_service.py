@@ -185,7 +185,8 @@ class AngelOneService:
             
             # Get historical data
             response = self.smart_api.getCandleData(historic_param)
-            
+            logger.info(f"getCandleData response for {symbol}: {response}")  # ADD THIS
+
             if not response or response.get('status') == False:
                 logger.error(f"Failed to get data for {symbol}: {response}")
                 return pd.DataFrame()
