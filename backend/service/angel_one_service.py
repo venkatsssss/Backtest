@@ -191,7 +191,7 @@ class AngelOneService:
             # Get historical data
             import requests as req
             headers = {
-                "Authorization": f"Bearer {self.auth_token}",
+                "Authorization": self.auth_token,
                     "Content-Type": "application/json",
                 "Accept": "application/json",
                 "X-UserType": "USER",
