@@ -142,88 +142,48 @@ class AngelOneService:
         end_date: str,
         interval: str = 'FIFTEEN_MINUTE'
     ) -> pd.DataFrame:
-        """
-        Get historical OHLC data for a symbol
-        
-        Args:
-            symbol: Stock symbol (e.g., 'SBIN')
-            start_date: Start date in 'YYYY-MM-DD' format
-            end_date: End date in 'YYYY-MM-DD' format
-            interval: Candle interval (default: FIFTEEN_MINUTE)
-        
-        Returns:
-            DataFrame with OHLC data
-        """
         try:
-            if not self.is_authenticated:
-                logger.error("Not authenticated with Angel One")
-                return pd.DataFrame()
-            
-            # Get token for symbol
-            instrument = self.instruments_cache.get(symbol)
-            if not instrument:
-                logger.error(f"Symbol {symbol} not found in instruments")
-                return pd.DataFrame()
-            
-            token = instrument['token']
-            
-            # Format dates for API
-            from_date = datetime.strptime(start_date, '%Y-%m-%d')
-            to_date = datetime.strptime(end_date, '%Y-%m-%d')
-            
-            from_date_str = from_date.strftime('%Y-%m-%d') + ' 09:15'
-            to_date_str = to_date.strftime('%Y-%m-%d') + ' 15:30'
-            
-            # Prepare request
-            historic_param = {
-                "exchange": "NSE",
-                "symboltoken": token,
-                "interval": interval,
-                "fromdate": from_date_str,
-                "todate": to_date_str
-            }
-            
-            # Get historical data
-            response = self.smart_api.getCandleData(historic_param)
-            logger.info(f"getCandleData response for {symbol}: {response}")  # ADD THIS
+            import yfinance as yf
 
-            if not response or response.get('status') == False:
-                logger.error(f"Failed to get data for {symbol}: {response}")
-                return pd.DataFrame()
-            
-            # Parse data
-            data = response.get('data', [])
-            if not data:
-                logger.warning(f"No data returned for {symbol}")
-                return pd.DataFrame()
-            
-            # Create DataFrame
-            df = pd.DataFrame(
-                data,
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+            interval_map = {
+                'ONE_MINUTE': '1m',
+                'FIVE_MINUTE': '5m',
+                'FIFTEEN_MINUTE': '15m',
+                'THIRTY_MINUTE': '30m',
+                'ONE_HOUR': '1h',
+                'ONE_DAY': '1d'
+            }
+            yf_interval = interval_map.get(interval, '15m')
+            ticker = f"{symbol}.NS"
+
+            df = yf.download(
+                ticker,
+                start=start_date,
+                end=end_date,
+                interval=yf_interval,
+                progress=False,
+                auto_adjust=True
             )
-            
-            # Process DataFrame
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df.set_index('timestamp', inplace=True)
-            
-            # Ensure timezone
+
+            if df.empty:
+                logger.warning(f"No data from yfinance for {symbol}")
+                return pd.DataFrame()
+
+            df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() 
+                          for c in df.columns]
+            df.index = pd.to_datetime(df.index)
+
             if df.index.tz is None:
                 df.index = df.index.tz_localize('Asia/Kolkata')
-            
-            # Convert to numeric
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            # Remove any NaN rows
-            df = df.dropna()
-            
-            logger.info(f"✅ Retrieved {len(df)} candles for {symbol}")
-            
+            else:
+                df.index = df.index.tz_convert('Asia/Kolkata')
+    
+            df = df[['open', 'high', 'low', 'close', 'volume']].dropna()
+            logger.info(f"✅ Retrieved {len(df)} candles for {symbol} via yfinance")
             return df
-            
+
         except Exception as e:
-            logger.error(f"Error fetching historical data for {symbol}: {e}")
+            logger.error(f"Error fetching data for {symbol}: {e}")
             return pd.DataFrame()
     
     async def get_multiple_historical_data(
