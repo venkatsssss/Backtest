@@ -329,6 +329,11 @@ else:
             "status": "running",
             "note": "Frontend not deployed"
         }
+@app.get("/api/myip")
+async def get_my_ip():
+    import requests as req
+    response = req.get("https://api.ipify.org?format=json")
+    return response.json()
 
 if __name__ == "__main__":
     uvicorn.run(
