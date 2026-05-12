@@ -161,9 +161,9 @@ class AngelOneService:
             
             # Get token for symbol
             instrument = self.instruments_cache.get(symbol)
-                if not instrument:
-                    logger.error(f"Symbol {symbol} not found in instruments")
-                    return pd.DataFrame()
+            if not instrument:
+                logger.error(f"Symbol {symbol} not found in instruments")
+                return pd.DataFrame()
 
             token = instrument['token']
             logger.info(f"Fetching {symbol} with token: {token}")  # ADD THIS LINE
