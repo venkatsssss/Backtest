@@ -51,7 +51,7 @@ class AngelOneService:
             self.auth_token = data['data']['jwtToken']
             self.feed_token = self.smart_api.getfeedToken()
             self.is_authenticated = True
-            
+            self.smart_api.setAccessToken(self.auth_token)
             logger.info("✅ Angel One authentication successful")
             
             # Load instruments
