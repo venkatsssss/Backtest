@@ -136,15 +136,16 @@ class AngelOneService:
             return []
     
     async def get_historical_data(
-        self, 
-        symbol: str, 
-        start_date: str, 
+        self,
+        symbol: str,
+        start_date: str,
         end_date: str,
         interval: str = 'FIFTEEN_MINUTE'
     ) -> pd.DataFrame:
         try:
             import yfinance as yf
-
+            import requests as req
+    
             interval_map = {
                 'ONE_MINUTE': '1m',
                 'FIVE_MINUTE': '5m',
@@ -154,36 +155,43 @@ class AngelOneService:
                 'ONE_DAY': '1d'
             }
             yf_interval = interval_map.get(interval, '15m')
-            ticker = f"{symbol}.NS"
-
-            df = yf.download(
-                ticker,
+            ticker_symbol = f"{symbol}.NS"
+    
+            # Custom session to bypass cloud IP blocking
+            session = req.Session()
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://finance.yahoo.com',
+            })
+    
+            ticker = yf.Ticker(ticker_symbol, session=session)
+            df = ticker.history(
                 start=start_date,
                 end=end_date,
                 interval=yf_interval,
-                progress=False,
                 auto_adjust=True
             )
-
+    
             if df.empty:
                 logger.warning(f"No data from yfinance for {symbol}")
                 return pd.DataFrame()
-
-            df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() 
-                          for c in df.columns]
+    
+            df.columns = [c.lower() for c in df.columns]
             df.index = pd.to_datetime(df.index)
-
+    
             if df.index.tz is None:
                 df.index = df.index.tz_localize('Asia/Kolkata')
             else:
                 df.index = df.index.tz_convert('Asia/Kolkata')
     
             df = df[['open', 'high', 'low', 'close', 'volume']].dropna()
-            logger.info(f"✅ Retrieved {len(df)} candles for {symbol} via yfinance")
+            logger.info(f"✅ Retrieved {len(df)} candles for {symbol}")
             return df
-
+    
         except Exception as e:
-            logger.error(f"Error fetching data for {symbol}: {e}")
+            logger.error(f"Error fetching {symbol}: {e}")
             return pd.DataFrame()
     
     async def get_multiple_historical_data(
