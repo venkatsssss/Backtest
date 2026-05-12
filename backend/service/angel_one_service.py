@@ -186,11 +186,15 @@ class AngelOneService:
             
             # Get historical data
             response = self.smart_api.getCandleData(historic_param)
-            
+
+# LOG EVERYTHING so we can debug
+            logger.info(f"Request for {symbol}: from={from_date_str} to={to_date_str} interval={interval}")
+            logger.info(f"Raw response for {symbol}: {response}")
+
             if not response or response.get('status') == False:
                 logger.error(f"Failed to get data for {symbol}: {response}")
                 return pd.DataFrame()
-            
+
             # Parse data
             data = response.get('data', [])
             if not data:
