@@ -155,10 +155,13 @@ class AngelOneService:
             DataFrame with OHLC data
         """
         try:
+            logger.info("Refreshing Angel One session...")
+            await self.authenticate()
+        
             if not self.is_authenticated:
                 logger.error("Not authenticated with Angel One")
                 return pd.DataFrame()
-            
+        
             # Get token for symbol
             instrument = self.instruments_cache.get(symbol)
             if not instrument:
