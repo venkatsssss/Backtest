@@ -74,6 +74,12 @@ async def health_check():
         timestamp=datetime.now().isoformat()
     )
 
+@app.get("/api/myip")
+async def get_my_ip():
+    import requests as req
+    response = req.get("https://api.ipify.org?format=json")
+    return response.json()
+
 @app.get("/api/stocks", response_model=List[StockInfo])
 async def get_stocks(sector: str = "all"):
     """Get NSE stocks list"""
@@ -329,11 +335,7 @@ else:
             "status": "running",
             "note": "Frontend not deployed"
         }
-@app.get("/api/myip")
-async def get_my_ip():
-    import requests as req
-    response = req.get("https://api.ipify.org?format=json")
-    return response.json()
+
 
 if __name__ == "__main__":
     uvicorn.run(
