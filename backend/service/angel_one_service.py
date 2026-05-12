@@ -188,16 +188,36 @@ class AngelOneService:
             }
             
             # Get historical data
-            response = self.smart_api.getCandleData(historic_param)
+            import requests as req
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                    "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-UserType": "USER",
+                "X-SourceID": "WEB",
+                "X-ClientLocalIP": "127.0.0.1",
+                "X-ClientPublicIP": "127.0.0.1",
+                "X-MACAddress": "00:00:00:00:00:00",
+                "X-PrivateKey": self.api_key
+                }
+            api_response = req.post(
+                "https://apiconnect.angelbroking.com/rest/secure/angelbroking/historical/v1/getCandleData",
+                json=historic_param,
+                headers=headers,
+                timeout=30
+)
+            response = api_response.json()
+            logger.info(f"Direct API response for {symbol}: {response}")
+
+            if not response.get('status') and not response.get('success'):
+                logger.error(f"Failed to get data for {symbol}: {response}")
+                return pd.DataFrame()
 
 # LOG EVERYTHING so we can debug
             logger.info(f"Request for {symbol}: from={from_date_str} to={to_date_str} interval={interval}")
             logger.info(f"Raw response for {symbol}: {response}")
 
-            if not response or response.get('status') == False:
-                logger.error(f"Failed to get data for {symbol}: {response}")
-                return pd.DataFrame()
-
+            
             # Parse data
             data = response.get('data', [])
             if not data:
