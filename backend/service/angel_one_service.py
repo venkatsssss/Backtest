@@ -143,51 +143,53 @@ class AngelOneService:
         interval: str = 'FIFTEEN_MINUTE'
     ) -> pd.DataFrame:
         try:
-            import yfinance as yf
             import requests as req
+            import os
     
             interval_map = {
-                'ONE_MINUTE': '1m',
-                'FIVE_MINUTE': '5m',
-                'FIFTEEN_MINUTE': '15m',
-                'THIRTY_MINUTE': '30m',
+                'ONE_MINUTE': '1min',
+                'FIVE_MINUTE': '5min',
+                'FIFTEEN_MINUTE': '15min',
+                'THIRTY_MINUTE': '30min',
                 'ONE_HOUR': '1h',
-                'ONE_DAY': '1d'
+                'ONE_DAY': '1day'
             }
-            yf_interval = interval_map.get(interval, '15m')
-            ticker_symbol = f"{symbol}.NS"
+            td_interval = interval_map.get(interval, '15min')
+            api_key = os.getenv('TWELVE_DATA_API_KEY')
     
-            # Custom session to bypass cloud IP blocking
-            session = req.Session()
-            session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json,text/plain,*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://finance.yahoo.com',
-            })
+            url = "https://api.twelvedata.com/time_series"
+            params = {
+                "symbol": f"{symbol}:NSE",
+                "interval": td_interval,
+                "start_date": start_date,
+                "end_date": end_date,
+                "outputsize": 5000,
+                "order": "ASC",
+                "apikey": api_key
+            }
     
-            ticker = yf.Ticker(ticker_symbol, session=session)
-            df = ticker.history(
-                start=start_date,
-                end=end_date,
-                interval=yf_interval,
-                auto_adjust=True
-            )
+            response = req.get(url, params=params, timeout=30)
+            data = response.json()
     
-            if df.empty:
-                logger.warning(f"No data from yfinance for {symbol}")
+            if data.get("status") == "error":
+                logger.error(f"Twelve Data error for {symbol}: {data.get('message')}")
                 return pd.DataFrame()
     
-            df.columns = [c.lower() for c in df.columns]
-            df.index = pd.to_datetime(df.index)
+            values = data.get("values", [])
+            if not values:
+                logger.warning(f"No data from Twelve Data for {symbol}")
+                return pd.DataFrame()
     
-            if df.index.tz is None:
-                df.index = df.index.tz_localize('Asia/Kolkata')
-            else:
-                df.index = df.index.tz_convert('Asia/Kolkata')
+            df = pd.DataFrame(values)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            df.set_index('datetime', inplace=True)
+            df.index = df.index.tz_localize('Asia/Kolkata')
+    
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
     
             df = df[['open', 'high', 'low', 'close', 'volume']].dropna()
-            logger.info(f"✅ Retrieved {len(df)} candles for {symbol}")
+            logger.info(f"✅ Retrieved {len(df)} candles for {symbol} via Twelve Data")
             return df
     
         except Exception as e:
